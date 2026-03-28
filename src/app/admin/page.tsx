@@ -414,6 +414,93 @@ function toCsvCell(value: string): string {
   return `"${safe}"`;
 }
 
+function getCsvTimestamp(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const seconds = String(now.getSeconds()).padStart(2, "0");
+  return `${year}${month}${day}-${hours}${minutes}${seconds}`;
+}
+
+function buildToursCsv(tours: TourAdminView[]): string {
+  const headers = [
+    "id",
+    "title",
+    "description",
+    "price",
+    "minPeople",
+    "status",
+    "isDeleted",
+    "deletedAt",
+    "featured",
+    "categoryId",
+    "categoryName",
+    "country",
+    "zone",
+    "durationDays",
+    "activityType",
+    "difficulty",
+    "guideType",
+    "transport",
+    "groups",
+    "story",
+    "includedItems",
+    "recommendations",
+    "faqs",
+    "availability",
+    "tourPackages",
+    "images",
+  ];
+
+  const rows = tours.map((tour) => {
+    const values = [
+      String(tour.id ?? ""),
+      tour.title ?? "",
+      tour.description ?? "",
+      Number.isFinite(Number(tour.price)) ? String(Number(tour.price)) : "",
+      Number.isFinite(Number(tour.minPeople)) ? String(Number(tour.minPeople)) : "",
+      tour.status ?? "",
+      String(Boolean(tour.isDeleted)),
+      tour.deletedAt ?? "",
+      String(Boolean(tour.featured)),
+      Number.isFinite(Number(tour.category?.id)) ? String(Number(tour.category?.id)) : "",
+      tour.category?.name ?? "",
+      tour.country ?? "",
+      tour.zone ?? "",
+      Number.isFinite(Number(tour.durationDays)) ? String(Number(tour.durationDays)) : "",
+      tour.activityType ?? "",
+      tour.difficulty ?? "",
+      tour.guideType ?? "",
+      tour.transport ?? "",
+      tour.groups ?? "",
+      JSON.stringify(Array.isArray(tour.story) ? tour.story : []),
+      JSON.stringify(Array.isArray(tour.includedItems) ? tour.includedItems : []),
+      JSON.stringify(Array.isArray(tour.recommendations) ? tour.recommendations : []),
+      JSON.stringify(Array.isArray(tour.faqs) ? tour.faqs : []),
+      JSON.stringify(Array.isArray(tour.availability) ? tour.availability : []),
+      JSON.stringify(Array.isArray(tour.tourPackages) ? tour.tourPackages : []),
+      JSON.stringify(Array.isArray(tour.images) ? tour.images : []),
+    ];
+
+    return values.map((value) => toCsvCell(String(value))).join(",");
+  });
+
+  return [headers.join(","), ...rows].join("\n");
+}
+
+function downloadCsv(content: string, filename: string): void {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function parseCsvRow(line: string): string[] {
   const values: string[] = [];
   let current = "";
@@ -584,6 +671,7 @@ function AdminPageContent() {
 
   const [filterConfig, setFilterConfig] = useState<FilterConfig>(defaultFilterConfig);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [selectedTourIds, setSelectedTourIds] = useState<number[]>([]);
 
   const createEmptyEditorState = (defaultCategoryId: number | null): TourEditorState => ({
     editingTourId: null,
@@ -760,6 +848,10 @@ function AdminPageContent() {
     if (!isAuthenticated) return;
     loadData();
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    setSelectedTourIds((prev) => prev.filter((id) => allTours.some((tour) => tour.id === id)));
+  }, [allTours]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1006,6 +1098,43 @@ function AdminPageContent() {
     link.download = "preguntas-frecuentes.csv";
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleToggleTourSelection = (tourId: number) => {
+    setSelectedTourIds((prev) =>
+      prev.includes(tourId) ? prev.filter((id) => id !== tourId) : [...prev, tourId],
+    );
+  };
+
+  const handleToggleSelectPageTours = (checked: boolean) => {
+    const currentIds = paginatedTours.map((tour) => tour.id);
+    setSelectedTourIds((prev) => {
+      if (checked) {
+        return Array.from(new Set([...prev, ...currentIds]));
+      }
+      return prev.filter((id) => !currentIds.includes(id));
+    });
+  };
+
+  const handleExportToursCsv = (mode: "all" | "selected") => {
+    const toursToExport = mode === "all" ? allTours : allTours.filter((tour) => selectedTourIds.includes(tour.id));
+
+    if (toursToExport.length === 0) {
+      setFeedback({
+        type: "error",
+        message: mode === "selected" ? "Selecciona al menos un tour para exportar." : "No hay tours para exportar.",
+      });
+      return;
+    }
+
+    const csv = buildToursCsv(toursToExport);
+    const timestamp = getCsvTimestamp();
+    const suffix = mode === "all" ? "todos" : "seleccionados";
+    downloadCsv(csv, `tours-${suffix}-${timestamp}.csv`);
+    setFeedback({
+      type: "success",
+      message: `Se exportaron ${toursToExport.length} tours a CSV.`,
+    });
   };
 
   const handleImportFaqCsv = async (files: FileList | null) => {
@@ -1676,6 +1805,11 @@ function AdminPageContent() {
     return tabTours.slice(start, start + itemsPerPage);
   }, [tabTours, currentPage, itemsPerPage]);
 
+  const isCurrentPageFullySelected = useMemo(() => {
+    if (paginatedTours.length === 0) return false;
+    return paginatedTours.every((tour) => selectedTourIds.includes(tour.id));
+  }, [paginatedTours, selectedTourIds]);
+
   useEffect(() => {
     if (!isEditorRoute || isAuthChecking || !isAuthenticated) return;
 
@@ -1782,6 +1916,20 @@ function AdminPageContent() {
               placeholder="Buscar por nombre, pais o actividad"
               className="w-full rounded-xl border border-slate-300 px-3 py-2 md:w-80"
             />
+            <button type="button" onClick={() => handleExportToursCsv("all")} className="rounded-xl border border-emerald-300 px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
+              Exportar todos CSV
+            </button>
+            <button type="button" onClick={() => handleExportToursCsv("selected")} className="rounded-xl border border-teal-300 px-4 py-2 text-sm font-bold text-teal-700 hover:bg-teal-50">
+              Exportar seleccionados CSV ({selectedTourIds.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedTourIds([])}
+              disabled={selectedTourIds.length === 0}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Limpiar seleccion
+            </button>
             <button type="button" onClick={() => setIsFilterConfigOpen(true)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
               Filtros visibles
             </button>
@@ -1848,6 +1996,14 @@ function AdminPageContent() {
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
               <tr>
+                <th className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={isCurrentPageFullySelected}
+                    onChange={(e) => handleToggleSelectPageTours(e.target.checked)}
+                    aria-label="Seleccionar tours de la pagina"
+                  />
+                </th>
                 <th className="px-3 py-3">Tour</th>
                 <th className="px-3 py-3">Categoria</th>
                 <th className="px-3 py-3">{activeTab === "PAPELERA" ? "Eliminado" : "Estado"}</th>
@@ -1861,6 +2017,14 @@ function AdminPageContent() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {paginatedTours.map((tour) => (
                 <tr key={tour.id}>
+                  <td className="px-3 py-3 align-top">
+                    <input
+                      type="checkbox"
+                      checked={selectedTourIds.includes(tour.id)}
+                      onChange={() => handleToggleTourSelection(tour.id)}
+                      aria-label={`Seleccionar tour ${tour.title}`}
+                    />
+                  </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-3">
                       <img src={tour.images?.[0]} alt={tour.title} className="h-12 w-16 rounded-md object-cover" />
@@ -1917,7 +2081,7 @@ function AdminPageContent() {
               ))}
               {paginatedTours.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-5 text-center text-slate-500">
+                  <td colSpan={9} className="px-3 py-5 text-center text-slate-500">
                     No hay tours para mostrar en esta pestana.
                   </td>
                 </tr>
