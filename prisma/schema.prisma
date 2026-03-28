@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TourStatus {
+  ACTIVO
+  NO_ACTIVO
+  BORRADOR
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  tours     Tour[]
+}
+
+model Tour {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  price       Float
+  minPeople   Int      @default(1)
+  images      String[]
+  status      TourStatus @default(ACTIVO)
+  country     String?
+  zone        String?
+  durationDays Int?
+  durationHours Int?
+  activityType String?
+  difficulty  String?
+  rating      Float?
+  reviews     Int?
+  guideType   String?
+  transport   String?
+  groups      String?
+  story       String[] @default([])
+  includedItems String[] @default([])
+  recommendations String[] @default([])
+  faqs        Json?
+  priceOptions Json?
+  tourPackages Json?
+  featured    Boolean @default(false)
+  isDeleted   Boolean @default(false)
+  deletedAt   DateTime?
+  categoryId  Int
+  category    Category @relation(fields: [categoryId], references: [id])
+  availability Availability[]
+  reservations Reservation[]
+}
+
+model Availability {
+  id      Int      @id @default(autoincrement())
+  date    DateTime
+  maxPeople Int
+  tourId  Int
+  tour    Tour     @relation(fields: [tourId], references: [id])
+}
+
+model Reservation {
+  id        Int      @id @default(autoincrement())
+  tourId    Int
+  tour      Tour     @relation(fields: [tourId], references: [id])
+  people    Int
+  adults    Int?
+  kids      Int?
+  date      DateTime
+  name      String
+  lastName  String?
+  email     String
+  emailConfirm String?
+  phone     String?
+  hotel     String?
+  paymentMethod String?
+  promoCode String?
+  scheduleTime String?
+  paid      Boolean  @default(false)
+}

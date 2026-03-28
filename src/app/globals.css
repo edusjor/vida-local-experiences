@@ -1,26 +1,89 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #000000;
+  --foreground: #123126;
+  --brand-green: #1f8a4d;
+  --brand-green-dark: #0f5a34;
+  --brand-gold: #f6b118;
+  --brand-cream: #f6f8ee;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-nunito);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-nunito), sans-serif;
+}
+
+.site-header {
+  background: linear-gradient(120deg, var(--brand-green-dark), var(--brand-green));
+  box-shadow: 0 12px 32px rgba(12, 67, 40, 0.25);
+}
+
+.hero-wrap {
+  background-image: linear-gradient(to top, rgba(12, 67, 40, 0.78), rgba(15, 90, 52, 0.32)),
+    url("https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1800&q=80");
+  background-size: cover;
+  background-position: center;
+}
+
+.script-title {
+  font-family: var(--font-kaushan), cursive;
+}
+
+.section-band {
+  background: linear-gradient(120deg, #f4faee, #e8f7ef);
+}
+
+.jungle-band {
+  background-image: linear-gradient(to right, rgba(16, 94, 53, 0.9), rgba(25, 135, 84, 0.84));
+}
+
+.dual-range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+.dual-range-input::-webkit-slider-runnable-track {
+  height: 8px;
+  background: transparent;
+}
+
+.dual-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 3px solid #22a06b;
+  box-shadow: 0 4px 10px rgba(22, 128, 72, 0.24);
+  margin-top: -6px;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.dual-range-input::-moz-range-track {
+  height: 8px;
+  background: transparent;
+}
+
+.dual-range-input::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 3px solid #22a06b;
+  box-shadow: 0 4px 10px rgba(22, 128, 72, 0.24);
+  pointer-events: auto;
+  cursor: pointer;
 }

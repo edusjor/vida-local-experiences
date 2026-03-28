@@ -1,0 +1,743 @@
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+
+interface TourPriceOption {
+  id: string;
+  name: string;
+  price: number;
+  isFree: boolean;
+  isBase?: boolean;
+}
+
+interface TourPackage {
+  id: string;
+  title: string;
+  description?: string;
+  priceOptions: TourPriceOption[];
+}
+
+interface Tour {
+  id: number;
+  title: string;
+  description: string;
+  price: number;
+  images: string[];
+  category: { name: string };
+  country?: string;
+  zone?: string;
+  durationDays?: number;
+  guideType?: string;
+  transport?: string;
+  groups?: string;
+  story?: string[];
+  tourPackages?: TourPackage[];
+  availability?: { id: number; date: string; maxPeople: number }[];
+  includedItems?: string[];
+  recommendations?: string[];
+  faqs?: Array<{ question: string; answer: string }>;
+}
+
+const LOCAL_TOURS_KEY = "toursAdminLocalTours";
+
+interface TourDetailView {
+  place: string;
+  duration: string;
+  guideType: string;
+  transport: string;
+  groups: string;
+  summary: string;
+  includes?: string[];
+  recommendations?: string[];
+  faqs?: Array<{ question: string; answer: string }>;
+}
+
+function normalizePriceOptions(items: unknown): TourPriceOption[] {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item, index) => {
+      const source = item as { id?: unknown; name?: unknown; price?: unknown; isFree?: unknown; isBase?: unknown };
+      const id = String(source?.id ?? `price-${index}`).trim();
+      const name = String(source?.name ?? "").trim();
+      const isFree = Boolean(source?.isFree);
+      const isBase = Boolean(source?.isBase);
+      const parsedPrice = Number(source?.price);
+      const price = isFree ? 0 : parsedPrice;
+      return { id, name, isFree, isBase, price };
+    })
+    .filter((item) => item.id && item.name && (item.isFree || (Number.isFinite(item.price) && item.price > 0)));
+}
+
+function formatPriceLabel(option: TourPriceOption): string {
+  if (option.isFree || option.price === 0) return "Gratis";
+  return `$${option.price.toFixed(2)}`;
+}
+
+function getBasePriceOption(options: TourPriceOption[]): TourPriceOption | null {
+  return options.find((option) => option.isBase) || null;
+}
+
+function normalizeTourPackages(items: unknown): TourPackage[] {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item, index) => {
+      const source = item as { id?: unknown; title?: unknown; description?: unknown; priceOptions?: unknown };
+      const id = String(source?.id ?? `package-${index}`).trim() || `package-${index}`;
+      const title = String(source?.title ?? "").trim();
+      const description = String(source?.description ?? "").trim();
+      const priceOptions = normalizePriceOptions(source?.priceOptions);
+
+      return { id, title, description, priceOptions };
+    })
+    .filter((pkg) => pkg.title && pkg.priceOptions.length > 0);
+}
+
+function buildNormalizedTourPackages(raw: Partial<Tour>): TourPackage[] {
+  const normalizedPackages = normalizeTourPackages(raw.tourPackages);
+  if (normalizedPackages.length > 0) return normalizedPackages;
+
+  const legacyOptions = normalizePriceOptions((raw as { priceOptions?: unknown }).priceOptions);
+  if (legacyOptions.length > 0) {
+    return [
+      {
+        id: "package-main",
+        title: "Paquete principal",
+        description: "",
+        priceOptions: legacyOptions,
+      },
+    ];
+  }
+
+  const fallbackPrice = typeof raw.price === "number" && Number.isFinite(raw.price) ? raw.price : 0;
+  return [
+    {
+      id: "package-main",
+      title: "Paquete principal",
+      description: "",
+      priceOptions: [
+        {
+          id: "general",
+          name: "General",
+          price: fallbackPrice,
+          isFree: fallbackPrice === 0,
+          isBase: true,
+        },
+      ],
+    },
+  ];
+}
+
+function getDurationLabel(days?: number): string {
+  const parts: string[] = [];
+  if (typeof days === 'number' && days > 0) parts.push(`${days} dia(s)`);
+  return parts.length ? parts.join(' ') : 'A confirmar';
+}
+
+function safeParse<T>(value: string | null, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function toDateKey(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function toMonthStart(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function shiftMonth(date: Date, amount: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function normalizeTour(raw: Partial<Tour> | null | undefined): Tour | null {
+  if (!raw?.id || !raw.title || !raw.description) return null;
+
+  const fallbackImage =
+    "https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1200&q=80";
+  const safeImages = Array.isArray(raw.images) && raw.images.length ? raw.images : [fallbackImage];
+
+  const hasIncludedItems = Object.prototype.hasOwnProperty.call(raw, "includedItems");
+  const hasRecommendations = Object.prototype.hasOwnProperty.call(raw, "recommendations");
+  const hasFaqs = Object.prototype.hasOwnProperty.call(raw, "faqs");
+  const hasStory = Object.prototype.hasOwnProperty.call(raw, "story");
+
+  return {
+    id: raw.id,
+    title: raw.title,
+    description: raw.description,
+    price: typeof raw.price === "number" ? raw.price : 0,
+    images: safeImages,
+    category: { name: raw.category?.name ?? "Tour" },
+    country: typeof raw.country === "string" ? raw.country : undefined,
+    zone: typeof raw.zone === "string" ? raw.zone : undefined,
+    durationDays: typeof raw.durationDays === "number" ? raw.durationDays : undefined,
+    guideType: typeof raw.guideType === "string" ? raw.guideType : undefined,
+    transport: typeof raw.transport === "string" ? raw.transport : undefined,
+    groups: typeof raw.groups === "string" ? raw.groups : undefined,
+    story: hasStory ? (Array.isArray(raw.story) ? raw.story.filter(Boolean) : []) : undefined,
+    tourPackages: buildNormalizedTourPackages(raw),
+    availability: Array.isArray(raw.availability) ? raw.availability : [],
+    includedItems: hasIncludedItems ? (Array.isArray(raw.includedItems) ? raw.includedItems.filter(Boolean) : []) : undefined,
+    recommendations: hasRecommendations ? (Array.isArray(raw.recommendations) ? raw.recommendations.filter(Boolean) : []) : undefined,
+    faqs: hasFaqs
+      ? Array.isArray(raw.faqs)
+        ? raw.faqs
+            .map((faq) => ({ question: faq?.question ?? "", answer: faq?.answer ?? "" }))
+            .filter((faq) => faq.question.trim())
+        : []
+      : undefined,
+  };
+}
+
+function getLocalTourById(id: number): Tour | null {
+  const localTours = safeParse<Partial<Tour>[]>(localStorage.getItem(LOCAL_TOURS_KEY), []);
+  const match = localTours.find((tour) => Number(tour.id) === id);
+  return normalizeTour(match);
+}
+
+export default function TourDetailPage() {
+  const params = useParams();
+  const [tour, setTour] = useState<Tour | null>(null);
+  const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
+  const [selectedAvailabilityDate, setSelectedAvailabilityDate] = useState<string>("");
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => toMonthStart(new Date()));
+  const [loading, setLoading] = useState(true);
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [galleryMainIndex, setGalleryMainIndex] = useState(0);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const tourId = typeof params?.id === "string" ? params.id : "";
+
+  useEffect(() => {
+    if (!tourId) {
+      setLoading(false);
+      return;
+    }
+
+    const parsedId = Number(tourId);
+    if (!Number.isFinite(parsedId)) {
+      setTour(null);
+      setLoading(false);
+      return;
+    }
+
+    fetch(`/api/tour?id=${tourId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const normalizedRemote = normalizeTour(data);
+        if (normalizedRemote) {
+          setTour(normalizedRemote);
+          return;
+        }
+
+        const localTour = getLocalTourById(parsedId);
+        if (localTour) {
+          setTour(localTour);
+          return;
+        }
+
+        setTour(null);
+      })
+      .catch(() => {
+        const localTour = getLocalTourById(parsedId);
+        if (localTour) {
+          setTour(localTour);
+          return;
+        }
+
+        setTour(null);
+      })
+      .finally(() => setLoading(false));
+  }, [tourId]);
+
+  const detail: TourDetailView | null = useMemo(() => {
+    if (!tour) return null;
+
+    return {
+      place: [tour.zone, tour.country].filter(Boolean).join(", ") || "Costa Rica",
+      duration: getDurationLabel(tour.durationDays),
+      guideType: tour.guideType ?? "Guia local",
+      transport: tour.transport ?? "Coordinado al reservar",
+      groups: tour.groups ?? "Grupos pequenos",
+      summary: tour.description,
+      includes: tour.includedItems,
+      recommendations: tour.recommendations,
+      faqs: tour.faqs,
+    };
+  }, [tour]);
+
+  const detailPricePreview = useMemo(() => {
+    if (!detail) return { label: `$${tour?.price.toFixed(2) ?? "0.00"}` };
+
+    const selectedPackage = (tour?.tourPackages || []).find((pkg) => pkg.id === selectedPackageId) || null;
+    const activeOptions = selectedPackage?.priceOptions || [];
+    if (!activeOptions.length) return { label: `$${tour?.price.toFixed(2) ?? "0.00"}` };
+
+    const baseOption = getBasePriceOption(activeOptions);
+    if (baseOption) return { label: formatPriceLabel(baseOption) };
+
+    return { label: `$${tour?.price.toFixed(2) ?? "0.00"}` };
+  }, [detail, tour?.price, tour?.tourPackages, selectedPackageId]);
+
+  const selectedPackage = useMemo(() => {
+    if (!tour?.tourPackages?.length) return null;
+    return tour.tourPackages.find((pkg) => pkg.id === selectedPackageId) || tour.tourPackages[0] || null;
+  }, [tour?.tourPackages, selectedPackageId]);
+
+  const activePriceOptions = selectedPackage?.priceOptions || [];
+
+  const sortedAvailability = useMemo(() => {
+    const raw = tour?.availability || [];
+    return [...raw].sort((a, b) => a.date.localeCompare(b.date));
+  }, [tour?.availability]);
+
+  const availableDateKeys = useMemo(() => {
+    return sortedAvailability
+      .map((item) => toDateKey(item.date))
+      .filter(Boolean);
+  }, [sortedAvailability]);
+
+  const availableDateSet = useMemo(() => new Set(availableDateKeys), [availableDateKeys]);
+
+  const monthLabel = useMemo(() => {
+    return calendarMonth.toLocaleDateString("es-CR", { month: "long", year: "numeric" });
+  }, [calendarMonth]);
+
+  const calendarCells = useMemo(() => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+    const totalCells = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
+
+    return Array.from({ length: totalCells }, (_, index) => {
+      const dayNumber = index - firstWeekday + 1;
+      if (dayNumber < 1 || dayNumber > daysInMonth) return null;
+
+      const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNumber).padStart(2, "0")}`;
+      const isAvailable = availableDateSet.has(key);
+      const isSelected = selectedAvailabilityDate === key;
+
+      return {
+        key,
+        dayNumber,
+        isAvailable,
+        isSelected,
+      };
+    });
+  }, [calendarMonth, availableDateSet, selectedAvailabilityDate]);
+
+  useEffect(() => {
+    if (!tour?.tourPackages?.length) {
+      setSelectedPackageId(null);
+      return;
+    }
+
+    const exists = tour.tourPackages.some((pkg) => pkg.id === selectedPackageId);
+    if (!exists) {
+      setSelectedPackageId(tour.tourPackages[0].id);
+    }
+  }, [tour?.tourPackages, selectedPackageId]);
+
+  useEffect(() => {
+    if (!availableDateKeys.length) {
+      setSelectedAvailabilityDate("");
+      return;
+    }
+
+    const exists = availableDateSet.has(selectedAvailabilityDate);
+    if (!exists) {
+      const firstDate = availableDateKeys[0];
+      setSelectedAvailabilityDate(firstDate);
+
+      const firstDateParsed = new Date(`${firstDate}T00:00:00`);
+      if (!Number.isNaN(firstDateParsed.getTime())) {
+        setCalendarMonth(toMonthStart(firstDateParsed));
+      }
+    }
+  }, [availableDateKeys, availableDateSet, selectedAvailabilityDate]);
+
+  const imagePool = useMemo(() => {
+    if (!tour || !detail) return [];
+    const merged = [...tour.images].filter(Boolean);
+    return Array.from(new Set(merged));
+  }, [detail, tour]);
+
+  const imagesForView = useMemo(() => {
+    if (!imagePool.length) return [];
+    if (imagePool.length >= 3) return imagePool;
+    return [...imagePool, ...imagePool, ...imagePool].slice(0, 3);
+  }, [imagePool]);
+
+  useEffect(() => {
+    setHeroIndex(0);
+    setGalleryMainIndex(0);
+    setLightboxIndex(null);
+  }, [tourId]);
+
+  useEffect(() => {
+    if (imagesForView.length <= 1) return;
+    const id = setInterval(() => {
+      setHeroIndex((prev) => (prev + 1) % imagesForView.length);
+    }, 4200);
+    return () => clearInterval(id);
+  }, [imagesForView.length]);
+
+  useEffect(() => {
+    if (imagesForView.length <= 1) return;
+    const id = setInterval(() => {
+      setGalleryMainIndex((prev) => (prev + 1) % imagesForView.length);
+    }, 3600);
+    return () => clearInterval(id);
+  }, [imagesForView.length]);
+
+  if (loading) {
+    return (
+      <section className="mx-auto max-w-6xl px-4 py-10">
+        <p className="rounded-xl bg-white p-6 text-slate-700 shadow">Cargando experiencia...</p>
+      </section>
+    );
+  }
+
+  if (!tour || !detail || !imagesForView.length) {
+    return (
+      <section className="mx-auto max-w-6xl px-4 py-10">
+        <p className="rounded-xl bg-white p-6 text-slate-700 shadow">No encontramos este tour de prueba.</p>
+      </section>
+    );
+  }
+
+  const slideBack = (current: number) => {
+    if (!imagesForView.length) return 0;
+    return (current - 1 + imagesForView.length) % imagesForView.length;
+  };
+
+  const slideNext = (current: number) => {
+    if (!imagesForView.length) return 0;
+    return (current + 1) % imagesForView.length;
+  };
+
+  const sideTopIndex = slideNext(galleryMainIndex);
+  const sideBottomIndex = slideNext(sideTopIndex);
+
+  const reserveHref = `/tours/${tour.id}/reservar${selectedPackage ? `?package=${encodeURIComponent(selectedPackage.id)}${selectedAvailabilityDate ? `&date=${encodeURIComponent(selectedAvailabilityDate)}` : ""}` : selectedAvailabilityDate ? `?date=${encodeURIComponent(selectedAvailabilityDate)}` : ""}`;
+
+  return (
+    <section className="relative overflow-hidden bg-[radial-gradient(circle_at_15%_10%,rgba(16,185,129,0.11),transparent_42%),radial-gradient(circle_at_90%_85%,rgba(245,158,11,0.12),transparent_38%),linear-gradient(180deg,#f8fbfa_0%,#ecf3f1_100%)]">
+      <div
+        className="relative w-full"
+        style={{
+          backgroundImage: `linear-gradient(108deg, rgba(248, 252, 250, 0.76) 0%, rgba(248, 252, 250, 0.54) 42%, rgba(248, 252, 250, 0.28) 100%), url(${imagesForView[heroIndex]})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
+        <div className="mx-auto max-w-6xl px-4 py-8 md:py-11">
+          <div className="max-w-3xl">
+            <div className="mb-3 flex flex-wrap gap-2 text-xs font-bold uppercase tracking-wide">
+              <span className="rounded-full bg-emerald-50/90 px-3 py-1 text-emerald-700">{tour.category?.name ?? "Tour"}</span>
+              <span className="rounded-full bg-emerald-50/90 px-3 py-1 text-emerald-700">{detail.duration}</span>
+            </div>
+            <h1 className="text-3xl font-extrabold leading-tight text-slate-900 md:text-5xl">{tour.title}</h1>
+            <p className="mt-3 text-sm text-slate-700">{detail.place}</p>
+            <a
+              href={reserveHref}
+              className="mt-6 inline-block rounded-xl bg-amber-400 px-6 py-3 font-extrabold text-slate-900 transition hover:bg-amber-300"
+            >
+              Reservar tour - {detailPricePreview.label}
+            </a>
+          </div>
+        </div>
+
+        <div className="absolute inset-x-0 bottom-4">
+          <div className="mx-auto flex max-w-6xl justify-end px-4">
+            <div className="flex items-center gap-2">
+              {imagesForView.map((img, index) => (
+                <button
+                  key={`${img}-${index}`}
+                  type="button"
+                  aria-label={`Ir al slide ${index + 1}`}
+                  onClick={() => setHeroIndex(index)}
+                  className={`h-2.5 w-2.5 rounded-full transition ${heroIndex === index ? "bg-slate-900" : "bg-slate-400/60"}`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#ecf3f1]" />
+      </div>
+
+      <div className="mx-auto max-w-6xl px-4 pb-8 pt-6">
+      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+        <div>
+          <div className="grid gap-3 md:grid-cols-[1.35fr_1fr]">
+            <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <img src={imagesForView[galleryMainIndex]} alt={tour.title} className="h-[420px] w-full object-cover" />
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-slate-900/65 to-transparent p-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md bg-white/90 px-2 py-1 text-xs font-bold text-slate-800"
+                    onClick={() => setGalleryMainIndex((prev) => slideBack(prev))}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md bg-white/90 px-2 py-1 text-xs font-bold text-slate-800"
+                    onClick={() => setGalleryMainIndex((prev) => slideNext(prev))}
+                  >
+                    Next
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-md bg-amber-300 px-2 py-1 text-xs font-bold text-slate-900"
+                  onClick={() => setLightboxIndex(galleryMainIndex)}
+                >
+                  Ampliar
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-3">
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <img src={imagesForView[sideTopIndex]} alt={`${tour.title} preview 1`} className="h-[203px] w-full object-cover" />
+              </div>
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <img src={imagesForView[sideBottomIndex]} alt={`${tour.title} preview 2`} className="h-[203px] w-full object-cover" />
+              </div>
+            </div>
+          </div>
+
+          <article className="mt-7 rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
+            <h2 className="text-2xl font-extrabold text-slate-900">Detalles generales</h2>
+            <p className="mt-3 whitespace-pre-line leading-relaxed text-slate-700">{tour.description}</p>
+          </article>
+
+          {Boolean(tour.tourPackages?.length) && (
+            <article className="mt-7 rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
+              <h3 className="text-xl font-extrabold text-slate-900">Paquetes disponibles</h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {tour.tourPackages?.map((pkg) => (
+                  <button
+                    key={pkg.id}
+                    type="button"
+                    onClick={() => setSelectedPackageId(pkg.id)}
+                    className={`rounded-xl border px-3 py-3 text-left transition ${selectedPackage?.id === pkg.id ? "border-emerald-400 bg-emerald-50" : "border-slate-200 bg-white hover:border-emerald-300"}`}
+                  >
+                    <p className="text-sm font-extrabold text-slate-900">{pkg.title}</p>
+                    {pkg.description && <p className="mt-1 text-xs text-slate-600">{pkg.description}</p>}
+                  </button>
+                ))}
+              </div>
+            </article>
+          )}
+
+          {Boolean(activePriceOptions.length) && (
+            <article className="mt-7 rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
+              <h3 className="text-xl font-extrabold text-slate-900">
+                Tipos de precio {selectedPackage ? `- ${selectedPackage.title}` : "- Paquete principal"}
+              </h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {activePriceOptions.map((option) => (
+                  <div key={option.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <span className="text-sm font-semibold text-slate-700">{option.name}</span>
+                    <span className={`text-sm font-extrabold ${option.isFree || option.price === 0 ? "text-emerald-700" : "text-slate-900"}`}>
+                      {formatPriceLabel(option)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </article>
+          )}
+
+          {(detail.includes?.length || detail.recommendations?.length) && (
+            <div className="mt-7 grid gap-4 md:grid-cols-2">
+              {Boolean(detail.includes?.length) && (
+                <article className="rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
+                  <h3 className="text-xl font-extrabold text-slate-900">Lo que esta incluido</h3>
+                  <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-700 marker:text-emerald-700">
+                    {detail.includes?.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </article>
+              )}
+
+              {Boolean(detail.recommendations?.length) && (
+                <article className="rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
+                  <h3 className="text-xl font-extrabold text-slate-900">Recomendaciones</h3>
+                  <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-700 marker:text-emerald-700">
+                    {detail.recommendations?.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </article>
+              )}
+            </div>
+          )}
+
+          {Boolean(detail.faqs?.length) && (
+            <article className="mt-7 rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
+              <h3 className="text-xl font-extrabold text-slate-900">Preguntas frecuentes</h3>
+              <div className="mt-3 space-y-2">
+                {detail.faqs?.map((faq) => (
+                  <details key={faq.question} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <summary className="cursor-pointer font-semibold text-slate-900">{faq.question}</summary>
+                    <p className="mt-2 text-slate-700">{faq.answer}</p>
+                  </details>
+                ))}
+              </div>
+            </article>
+          )}
+        </div>
+
+        <aside className="rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_10px_35px_rgba(15,23,42,0.09)] backdrop-blur-sm lg:sticky lg:top-6 lg:h-fit">
+          <p className="text-4xl font-black text-emerald-800">{detailPricePreview.label}</p>
+          <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">Precio segun tipo seleccionado</p>
+          <div className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-700">
+            <p>- Duracion: {detail.duration}</p>
+            <p>- {detail.guideType}</p>
+            <p>- {detail.transport}</p>
+            <p>- {detail.groups}</p>
+            <p>- Punto de salida: {detail.place}</p>
+            <p>- Proxima fecha: {sortedAvailability[0] ? new Date(sortedAvailability[0].date).toLocaleDateString() : "A confirmar"}</p>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-sm font-extrabold text-slate-800">Consulta disponibilidad</p>
+            <p className="mt-1 text-xs text-slate-600">Selecciona en el calendario una fecha disponible.</p>
+
+            {availableDateKeys.length > 0 ? (
+              <>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCalendarMonth((prev) => shiftMonth(prev, -1))}
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-emerald-300"
+                  >
+                    Anterior
+                  </button>
+                  <p className="text-sm font-bold capitalize text-slate-800">{monthLabel}</p>
+                  <button
+                    type="button"
+                    onClick={() => setCalendarMonth((prev) => shiftMonth(prev, 1))}
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-emerald-300"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+
+                <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => (
+                    <span key={day} className="py-1">
+                      {day}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-1 grid grid-cols-7 gap-1">
+                  {calendarCells.map((cell, index) => {
+                    if (!cell) {
+                      return <span key={`empty-${index}`} className="h-8 rounded-md" aria-hidden="true" />;
+                    }
+
+                    const baseClass = "h-8 rounded-md text-xs font-bold transition";
+                    const className = cell.isSelected
+                      ? `${baseClass} border border-emerald-400 bg-emerald-500 text-white`
+                      : cell.isAvailable
+                        ? `${baseClass} border border-emerald-200 bg-emerald-100 text-emerald-900 hover:bg-emerald-200`
+                        : `${baseClass} border border-slate-200 bg-white text-slate-300 cursor-not-allowed`;
+
+                    return (
+                      <button
+                        key={cell.key}
+                        type="button"
+                        disabled={!cell.isAvailable}
+                        onClick={() => setSelectedAvailabilityDate(cell.key)}
+                        className={className}
+                        aria-label={`Dia ${cell.dayNumber}`}
+                      >
+                        {cell.dayNumber}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="mt-2 text-[11px] text-slate-500">Solo se habilitan dias con disponibilidad.</p>
+              </>
+            ) : (
+              <p className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">Sin fechas disponibles por ahora.</p>
+            )}
+          </div>
+
+          <a
+            href={reserveHref}
+            className="mt-5 block rounded-xl bg-emerald-700 px-5 py-3 text-center font-extrabold text-white transition hover:bg-emerald-600"
+          >
+            Reservar ahora
+          </a>
+          <p className="mt-3 text-xs text-slate-500">Reserva flexible y confirmacion por correo en minutos.</p>
+        </aside>
+      </div>
+      </div>
+
+      {lightboxIndex !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/85 p-4" role="dialog" aria-modal="true">
+          <div className="relative w-full max-w-6xl rounded-2xl bg-slate-950 p-4">
+            <button
+              type="button"
+              onClick={() => setLightboxIndex(null)}
+              className="absolute right-3 top-3 rounded-md bg-white px-3 py-1 text-sm font-bold text-slate-900"
+            >
+              Cerrar
+            </button>
+
+            <img
+              src={imagesForView[lightboxIndex]}
+              alt={tour.title}
+              className="max-h-[80vh] w-full rounded-xl object-contain"
+            />
+
+            <div className="mt-4 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setLightboxIndex(slideBack(lightboxIndex))}
+                className="rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-900"
+              >
+                Imagen anterior
+              </button>
+              <p className="text-sm text-slate-300">
+                {lightboxIndex + 1} / {imagesForView.length}
+              </p>
+              <button
+                type="button"
+                onClick={() => setLightboxIndex(slideNext(lightboxIndex))}
+                className="rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-900"
+              >
+                Imagen siguiente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}

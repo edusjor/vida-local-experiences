@@ -1,0 +1,7 @@
+- [x] Proyecto renombrado a tours-sys y creado con Next.js, Tailwind CSS, ESLint, App Router, estructura src/.
+- [ ] Personalizar el proyecto según requisitos del sitio web de tours.
+- [ ] Instalar extensiones requeridas.
+- [ ] Compilar el proyecto.
+- [ ] Crear y ejecutar tareas.
+- [ ] Lanzar el proyecto.
+- [ ] Documentación completa.

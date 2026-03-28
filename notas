@@ -1,0 +1,62 @@
+Hallazgos (priorizados por severidad)
+
+Critico - El admin no persiste ediciones de tours en base de datos (solo localStorage).
+Cuando editas un tour existente, el flujo actual solo modifica estado local y localStorage; no hay llamada API para update. Esto rompe la interconexion real admin -> DB -> front entre dispositivos/sesiones.
+Evidencia: page.tsx:701, page.tsx:702, page.tsx:636
+
+Critico - El backend admin solo permite crear tours, no actualizar/eliminar/publicar/despublicar.
+Existe un unico endpoint admin y solo acepta POST para create. No hay PUT/PATCH/DELETE ni endpoints admin para categorias, papelera, etc.
+Evidencia: tour.ts:6, tour.ts:8, tour.ts:15, tour.ts:31, tour.ts
+
+Critico - Desfase fuerte entre modelo de datos del admin/front y esquema Prisma (datos sueltos).
+El admin maneja campos como country, durationDays, durationHours, activityType, difficulty, includedItems, recommendations, faqs, featured, isDeleted, deletedAt, pero el modelo Tour en Prisma no los tiene. Esos datos no pueden persistirse correctamente en DB.
+Evidencia: page.tsx:53, page.tsx:64, schema.prisma:21, schema.prisma:29
+
+Critico - Flujo de reservas inconsistente con capacidad real (puede sobre-reservar).
+La API valida people <= maxPeople de una fecha, pero no descuenta cupos ni acumula reservas previas. Puedes reservar repetidamente la misma fecha y exceder capacidad total.
+Evidencia: reservar.ts:9, reservar.ts:10, schema.prisma:37, schema.prisma:46
+
+Critico - Reserva acepta combinaciones inconsistentes tourId/availabilityId.
+La API busca disponibilidad solo por id y luego crea reservation con tourId recibido, sin verificar que esa disponibilidad pertenezca al mismo tour.
+Evidencia: reservar.ts:7, reservar.ts:8, reservar.ts:12
+
+Critico - Seguridad debil en admin (credenciales hardcodeadas en cliente + endpoint sin auth).
+Usuario y password estan en frontend, visibles; session basada en localStorage; y el endpoint admin no valida autenticacion.
+Evidencia: page.tsx:83, page.tsx:84, page.tsx:467, page.tsx:1020, tour.ts:6
+
+Alto - El front prioriza localStorage sobre DB y puede ocultar cambios reales del servidor.
+Se mezclan tours remotos con locales y luego se siguen usando snapshots locales como fuente fuerte. Esto genera divergencias entre usuarios/navegadores y entre admin y clientes reales.
+Evidencia: page.tsx:415, page.tsx:450, page.tsx:243, page.tsx:245, src/app/tours/[id]/page.tsx
+
+Alto - Parte del contenido de cada tour en detalle no es editable desde admin (hardcoded templates).
+Campos mostrados al cliente (place, duration, rating, reviews, guideType, transport, groups, story, etc.) vienen de plantillas mock y no del admin/DB.
+Evidencia: src/app/tours/[id]/page.tsx, src/app/tours/[id]/page.tsx, src/app/tours/[id]/page.tsx
+
+Alto - Uso extensivo de mocks/fallbacks en cliente enmascara problemas reales de interconexion.
+Si API falla o viene vacia, front muestra mockTours/mockCategories/mockTourMap/mockAvailabilityByTour, dando apariencia de funcionamiento aunque DB no este alineada.
+Evidencia: page.tsx:53, page.tsx:60, page.tsx:247, src/app/tours/[id]/page.tsx, src/app/tours/[id]/page.tsx, src/app/tours/[id]/reservar/page.tsx, src/app/tours/[id]/reservar/page.tsx
+
+Alto - En reserva se muestra exito "sin base de datos" incluso ante error real.
+Ante fallo en API, UX confirma reserva de prueba, lo cual puede crear falsas reservas para el cliente.
+Evidencia: src/app/tours/[id]/reservar/page.tsx, src/app/tours/[id]/reservar/page.tsx
+
+Medio - Campos capturados en checkout no se guardan en DB (informacion suelta).
+UI pide apellido, confirmacion email, telefono, hotel, metodo de pago, promo code, horario, detalle adultos/ninos; API y modelo Reservation guardan solo tourId, people, date, name, email, paid.
+Evidencia: src/app/tours/[id]/reservar/page.tsx, reservar.ts:7, schema.prisma:42, schema.prisma:50
+
+Medio - Inconsistencia de moneda/precio entre listado, detalle y checkout.
+Listado y detalle muestran USD, pero checkout convierte price * 75 y muestra MXN. Puede generar diferencias de cobro y confusion.
+Evidencia: page.tsx:577, src/app/tours/[id]/page.tsx, src/app/tours/[id]/reservar/page.tsx, src/app/tours/[id]/reservar/page.tsx
+
+Medio - Gestion de categorias desconectada de DB y con UX incompleta.
+Se cargan categorias de API, pero crear/editar/eliminar se hace localmente; ademas hay logica de edicion de categoria pero en modal no hay controles de editar/eliminar (solo chips).
+Evidencia: page.tsx:417, page.tsx:648, page.tsx:907, page.tsx:939, page.tsx:1597
+
+Medio - Hay secciones front fuera del circuito admin/DB.
+Inicio, contacto y quienes-somos son contenido estatico en codigo; no existe administracion de ese contenido.
+Evidencia: page.tsx:52, page.tsx:147, page.tsx:1, page.tsx:1
+
+Bajo - Patrón PrismaClient por archivo API puede causar problemas de conexiones en algunos entornos.
+Cada handler crea su propia instancia en modulo; suele recomendarse singleton compartido en Next para evitar saturacion de conexiones en dev/serverless.
+Evidencia: tours.ts:3, tour.ts:3, reservar.ts:3, tour.ts:3
+
