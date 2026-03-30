@@ -3,8 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "db:generate": "prisma generate",
+    "db:ensure": "prisma migrate deploy && prisma db push --skip-generate",
+    "predev": "npm run db:generate && npm run db:ensure",
     "dev": "next dev --webpack -p 3003",
+    "prebuild": "npm run db:generate && npm run db:ensure",
     "build": "next build",
+    "prestart": "npm run db:generate && npm run db:ensure",
     "start": "next start -p 3003",
     "lint": "eslint",
     "postpull": "npm run build"
