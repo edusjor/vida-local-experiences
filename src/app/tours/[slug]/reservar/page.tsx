@@ -7,6 +7,24 @@ interface Availability {
   id: number;
   date: string;
   maxPeople: number;
+  timeSlots?: string[];
+}
+
+type AvailabilityMode = "SPECIFIC" | "OPEN";
+
+interface OpenScheduleConfig {
+  maxPeople: number;
+  startTime: string;
+  endTime: string;
+  intervalMinutes: number;
+  useCustomTimes: boolean;
+  customTimesText: string;
+}
+
+interface AvailabilityConfig {
+  mode: AvailabilityMode;
+  openSchedule: OpenScheduleConfig;
+  dateSchedules: Record<string, string[]>;
 }
 
 interface TourPriceOption {
@@ -26,6 +44,7 @@ interface TourPackage {
 
 interface LocalTourAvailability {
   id: number;
+  slug?: string;
   title?: string;
   images?: string[];
   price?: number;
@@ -33,9 +52,11 @@ interface LocalTourAvailability {
   tourPackages?: TourPackage[];
   priceOptions?: TourPriceOption[];
   availability?: Availability[];
+  availabilityConfig?: AvailabilityConfig;
 }
 
 const LOCAL_TOURS_KEY = "toursAdminLocalTours";
+const TOUR_PLACEHOLDER_IMAGE = "/tour-placeholder.svg";
 
 interface TourLite {
   id: number;
@@ -44,9 +65,147 @@ interface TourLite {
   price: number;
   minPeople: number;
   tourPackages: TourPackage[];
+  availabilityConfig?: AvailabilityConfig;
 }
 
-const timeOptions = ["9:00 AM", "12:00 PM", "3:00 PM"];
+const defaultOpenSchedule: OpenScheduleConfig = {
+  maxPeople: 10,
+  startTime: "08:00",
+  endTime: "17:00",
+  intervalMinutes: 30,
+  useCustomTimes: false,
+  customTimesText: "",
+};
+
+const defaultAvailabilityConfig: AvailabilityConfig = {
+  mode: "SPECIFIC",
+  openSchedule: defaultOpenSchedule,
+  dateSchedules: {},
+};
+
+function normalizeTime24(value: unknown): string | null {
+  const trimmed = String(value ?? "").trim();
+  const match = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function toMinutes(time24: string): number {
+  const [hours, minutes] = time24.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function normalizeTimeSlots(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+  return Array.from(
+    new Set(
+      items
+        .map((item) => normalizeTime24(item))
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).sort();
+}
+
+function formatTimeLabel(time24: string): string {
+  const [hoursRaw, minutesRaw] = time24.split(":").map(Number);
+  const suffix = hoursRaw >= 12 ? "PM" : "AM";
+  const hours = hoursRaw % 12 || 12;
+  return `${hours}:${String(minutesRaw).padStart(2, "0")} ${suffix}`;
+}
+
+function buildIntervalTimeSlots(startTime: string, endTime: string, intervalMinutes: number): string[] {
+  const start = normalizeTime24(startTime);
+  const end = normalizeTime24(endTime);
+  const safeInterval = Number.isFinite(intervalMinutes) ? Math.floor(intervalMinutes) : 0;
+  if (!start || !end || safeInterval <= 0) return [];
+  const startMin = toMinutes(start);
+  const endMin = toMinutes(end);
+  if (startMin > endMin) return [];
+
+  const slots: string[] = [];
+  for (let min = startMin; min <= endMin; min += safeInterval) {
+    const hours = Math.floor(min / 60);
+    const minutes = min % 60;
+    slots.push(`${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`);
+  }
+  return slots;
+}
+
+function parseCustomTimeSlots(input: string): string[] {
+  return Array.from(
+    new Set(
+      String(input || "")
+        .split(/[\n,;]+/)
+        .map((item) => normalizeTime24(item))
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).sort();
+}
+
+function buildTimeSlotsFromSchedule(schedule: OpenScheduleConfig): string[] {
+  return schedule.useCustomTimes
+    ? parseCustomTimeSlots(schedule.customTimesText)
+    : buildIntervalTimeSlots(schedule.startTime, schedule.endTime, schedule.intervalMinutes);
+}
+
+function normalizeAvailabilityConfig(input: unknown): AvailabilityConfig {
+  if (!input || typeof input !== "object") return defaultAvailabilityConfig;
+  const source = input as Partial<AvailabilityConfig>;
+  const openSource = source.openSchedule ?? defaultOpenSchedule;
+  const dateSchedulesRaw = source.dateSchedules;
+  const dateSchedules: Record<string, string[]> = {};
+
+  if (dateSchedulesRaw && typeof dateSchedulesRaw === "object" && !Array.isArray(dateSchedulesRaw)) {
+    Object.entries(dateSchedulesRaw).forEach(([key, value]) => {
+      dateSchedules[key] = normalizeTimeSlots(value);
+    });
+  }
+
+  return {
+    mode: source.mode === "OPEN" ? "OPEN" : "SPECIFIC",
+    openSchedule: {
+      maxPeople: Number.isFinite(Number(openSource.maxPeople)) && Number(openSource.maxPeople) > 0 ? Math.floor(Number(openSource.maxPeople)) : 10,
+      startTime: normalizeTime24(openSource.startTime) ?? "08:00",
+      endTime: normalizeTime24(openSource.endTime) ?? "17:00",
+      intervalMinutes: Number.isFinite(Number(openSource.intervalMinutes)) && Number(openSource.intervalMinutes) > 0 ? Math.floor(Number(openSource.intervalMinutes)) : 30,
+      useCustomTimes: Boolean(openSource.useCustomTimes),
+      customTimesText: String(openSource.customTimesText ?? ""),
+    },
+    dateSchedules,
+  };
+}
+
+function sanitizeAvailabilityItems(items: unknown): Availability[] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => {
+      const source = item as { id?: unknown; date?: unknown; maxPeople?: unknown; timeSlots?: unknown };
+      const id = Number(source?.id);
+      const maxPeople = Number(source?.maxPeople);
+      return {
+        id: Number.isFinite(id) ? id : 0,
+        date: String(source?.date ?? ""),
+        maxPeople: Number.isFinite(maxPeople) ? maxPeople : 0,
+        timeSlots: normalizeTimeSlots(source?.timeSlots),
+      } satisfies Availability;
+    })
+    .filter((item) => item.date && item.maxPeople > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function applyDateSchedulesToAvailability(items: Availability[], dateSchedules: Record<string, string[]>): Availability[] {
+  return items.map((item) => {
+    const key = String(item.date).slice(0, 10);
+    return {
+      ...item,
+      timeSlots: normalizeTimeSlots(key ? dateSchedules[key] ?? item.timeSlots : item.timeSlots),
+    };
+  });
+}
 
 function formatCurrencyUSD(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -167,20 +326,79 @@ function buildNormalizedPackages(tour: { tourPackages?: unknown; priceOptions?: 
   ];
 }
 
+function slugifyTourValue(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function getLocalReservationSeed(tourSlug: string): {
+  tour: TourLite | null;
+  availability: Availability[];
+  availabilityConfig: AvailabilityConfig;
+  visibleMonth: Date | null;
+} {
+  if (!tourSlug || typeof window === "undefined") {
+    return { tour: null, availability: [], availabilityConfig: defaultAvailabilityConfig, visibleMonth: null };
+  }
+
+  const localTours = safeParse<LocalTourAvailability[]>(localStorage.getItem(LOCAL_TOURS_KEY), []);
+  const localTour = localTours.find((item) => {
+    const candidateSlug = typeof item.slug === "string" && item.slug.trim() ? item.slug : slugifyTourValue(String(item.title ?? ""));
+    return candidateSlug === tourSlug;
+  });
+  const availabilityConfig = normalizeAvailabilityConfig(localTour?.availabilityConfig);
+  const availability = applyDateSchedulesToAvailability(sanitizeAvailabilityItems(localTour?.availability), availabilityConfig.dateSchedules);
+
+  const firstDate = availability[0] ? new Date(availability[0].date) : null;
+  const fallbackMonth = availabilityConfig.mode === "OPEN" ? monthStart(new Date()) : null;
+
+  return {
+    tour: localTour
+      ? {
+          id: localTour.id,
+          title: localTour.title || "Tour",
+          image: Array.isArray(localTour.images) && localTour.images[0] ? localTour.images[0] : TOUR_PLACEHOLDER_IMAGE,
+          price: typeof localTour.price === "number" ? localTour.price : 0,
+          minPeople: Math.max(1, Number(localTour.minPeople) || 1),
+          tourPackages: buildNormalizedPackages(localTour),
+          availabilityConfig,
+        }
+      : null,
+    availability,
+    availabilityConfig,
+    visibleMonth: firstDate ? new Date(firstDate.getFullYear(), firstDate.getMonth(), 1) : fallbackMonth,
+  };
+}
+
 export default function ReservarPage() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const tourId = typeof params?.id === "string" ? params.id : "";
+  const tourSlug = typeof params?.slug === "string" ? params.slug : "";
   const packageFromQuery = searchParams?.get("package") ?? null;
 
-  const [tour, setTour] = useState<TourLite | null>(null);
+  return <ReservarPageContent key={`${tourSlug}:${packageFromQuery ?? "default"}`} tourSlug={tourSlug} packageFromQuery={packageFromQuery} />;
+}
+
+function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string; packageFromQuery: string | null }) {
+  const initialLocalData = useMemo(() => getLocalReservationSeed(tourSlug), [tourSlug]);
+
+  const [tour, setTour] = useState<TourLite | null>(() => initialLocalData.tour);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState("");
 
-  const [availability, setAvailability] = useState<Availability[]>([]);
-  const [selectedDateId, setSelectedDateId] = useState<number | null>(null);
-  const [visibleMonth, setVisibleMonth] = useState<Date | null>(null);
-  const [selectedTime, setSelectedTime] = useState(timeOptions[0]);
+  const [availability, setAvailability] = useState<Availability[]>(() => initialLocalData.availability);
+  const [availabilityConfig, setAvailabilityConfig] = useState<AvailabilityConfig>(() => initialLocalData.availabilityConfig);
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(() => {
+    if (initialLocalData.availability[0]) return String(initialLocalData.availability[0].date).slice(0, 10);
+    return initialLocalData.availabilityConfig.mode === "OPEN" ? toDateKey(new Date()) : null;
+  });
+  const [visibleMonth, setVisibleMonth] = useState<Date | null>(() => initialLocalData.visibleMonth);
+  const [selectedTime, setSelectedTime] = useState("");
   const [priceQuantities, setPriceQuantities] = useState<Record<string, number>>({});
   const [showPassengerPanel, setShowPassengerPanel] = useState(false);
   const [step, setStep] = useState<"contacto" | "pago">("contacto");
@@ -197,99 +415,48 @@ export default function ReservarPage() {
   const [remainingSeconds, setRemainingSeconds] = useState(15 * 60);
 
   useEffect(() => {
-    if (!tourId) return;
+    if (!tourSlug) return;
 
-    const localTours = safeParse<LocalTourAvailability[]>(localStorage.getItem(LOCAL_TOURS_KEY), []);
-    const localTour = localTours.find((item) => String(item.id) === tourId);
-    const localAvailability = Array.isArray(localTour?.availability)
-      ? localTour.availability.filter((item) => item?.date && Number(item?.maxPeople) > 0)
-      : [];
-
-    if (localAvailability.length) {
-      const sortedLocal = [...localAvailability].sort((a, b) => a.date.localeCompare(b.date));
-      setAvailability(sortedLocal);
-      setSelectedDateId(sortedLocal[0]?.id ?? null);
-      if (sortedLocal[0]) {
-        const first = new Date(sortedLocal[0].date);
-        setVisibleMonth(new Date(first.getFullYear(), first.getMonth(), 1));
-      }
-    }
-
-    if (localTour) {
-      setTour({
-        id: localTour.id,
-        title: localTour.title || "Tour",
-        image: Array.isArray(localTour.images) && localTour.images[0] ? localTour.images[0] : "",
-        price: typeof localTour.price === "number" ? localTour.price : 0,
-        minPeople: Math.max(1, Number(localTour.minPeople) || 1),
-        tourPackages: buildNormalizedPackages(localTour),
-      });
-    }
-
-    fetch(`/api/availability?tourId=${tourId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const next = Array.isArray(data) ? data : [];
-        setAvailability(next);
-        setSelectedDateId(next[0]?.id ?? null);
-        if (next[0]) {
-          const first = new Date(next[0].date);
-          setVisibleMonth(new Date(first.getFullYear(), first.getMonth(), 1));
-        }
-      })
-      .catch(() => {
-        const next = localAvailability;
-        setAvailability(next);
-        setSelectedDateId(next[0]?.id ?? null);
-        if (next[0]) {
-          const first = new Date(next[0].date);
-          setVisibleMonth(new Date(first.getFullYear(), first.getMonth(), 1));
-        }
-        setLoadError("No se pudo cargar la disponibilidad del tour desde el servidor.");
-      });
-
-    fetch(`/api/tour?id=${tourId}`)
+    fetch(`/api/tour?slug=${encodeURIComponent(tourSlug)}`)
       .then((res) => res.json())
       .then((data) => {
         if (data?.id) {
+          const nextConfig = normalizeAvailabilityConfig(data.availabilityConfig);
+          const nextAvailability = applyDateSchedulesToAvailability(sanitizeAvailabilityItems(data.availability), nextConfig.dateSchedules);
+
           setTour({
             id: data.id,
             title: data.title,
-            image: Array.isArray(data.images) && data.images[0] ? data.images[0] : "",
+            image: Array.isArray(data.images) && data.images[0] ? data.images[0] : TOUR_PLACEHOLDER_IMAGE,
             price: typeof data.price === "number" ? data.price : 0,
             minPeople: Math.max(1, Number(data.minPeople) || 1),
             tourPackages: buildNormalizedPackages(data),
+            availabilityConfig: nextConfig,
           });
+          setAvailabilityConfig(nextConfig);
+          setAvailability(nextAvailability);
+          setSelectedDateKey(nextAvailability[0] ? String(nextAvailability[0].date).slice(0, 10) : nextConfig.mode === "OPEN" ? toDateKey(new Date()) : null);
+          if (nextAvailability[0]) {
+            const first = new Date(nextAvailability[0].date);
+            setVisibleMonth(new Date(first.getFullYear(), first.getMonth(), 1));
+          } else if (nextConfig.mode === "OPEN") {
+            setVisibleMonth(monthStart(new Date()));
+          }
           setLoadError("");
           return;
         }
-        setTour(null);
+        setTour(initialLocalData.tour);
+        setAvailability(initialLocalData.availability);
+        setAvailabilityConfig(initialLocalData.availabilityConfig);
         setLoadError("No se encontro informacion del tour solicitado en el servidor.");
       })
       .catch(() => {
-        setTour(null);
+        setTour(initialLocalData.tour);
+        setAvailability(initialLocalData.availability);
+        setAvailabilityConfig(initialLocalData.availabilityConfig);
         setLoadError("No se pudo cargar la informacion del tour desde el servidor.");
       });
-  }, [tourId]);
-
-  useEffect(() => {
-    if (!tour) return;
-    const availablePackages = tour.tourPackages || [];
-
-    if (!availablePackages.length) {
-      setSelectedPackageId(null);
-      return;
-    }
-
-    if (packageFromQuery && availablePackages.some((pkg) => pkg.id === packageFromQuery)) {
-      setSelectedPackageId(packageFromQuery);
-      return;
-    }
-
-    if (!selectedPackageId || !availablePackages.some((pkg) => pkg.id === selectedPackageId)) {
-      setSelectedPackageId(availablePackages[0].id);
-    }
-  }, [tour, packageFromQuery, selectedPackageId]);
+  }, [initialLocalData.availability, initialLocalData.availabilityConfig, initialLocalData.tour, tourSlug]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -298,53 +465,53 @@ export default function ReservarPage() {
     return () => clearInterval(id);
   }, []);
 
-  const visiblePriceOptions = useMemo(() => {
-    if (!tour) return [];
-    const selectedPackage = (tour.tourPackages || []).find((pkg) => pkg.id === selectedPackageId) || null;
-    const sourceOptions = selectedPackage?.priceOptions || [];
-    return getVisiblePriceOptions(sourceOptions, tour.price);
-  }, [tour, selectedPackageId]);
-
   const selectedPackage = useMemo(() => {
     if (!tour?.tourPackages?.length) return null;
+    if (packageFromQuery) {
+      const packageFromUrl = tour.tourPackages.find((pkg) => pkg.id === packageFromQuery);
+      if (packageFromUrl) return packageFromUrl;
+    }
+
     return tour.tourPackages.find((pkg) => pkg.id === selectedPackageId) || tour.tourPackages[0] || null;
-  }, [tour?.tourPackages, selectedPackageId]);
+  }, [packageFromQuery, selectedPackageId, tour]);
 
-  useEffect(() => {
-    if (!visiblePriceOptions.length) return;
+  const visiblePriceOptions = useMemo(() => {
+    if (!tour) return [];
+    const sourceOptions = selectedPackage?.priceOptions || [];
+    return getVisiblePriceOptions(sourceOptions, tour.price);
+  }, [selectedPackage, tour]);
 
-    setPriceQuantities((prev) => {
-      const next: Record<string, number> = {};
-      visiblePriceOptions.forEach((option) => {
-        next[option.id] = prev[option.id] ?? 0;
-      });
+  const normalizedPriceQuantities = useMemo(() => {
+    if (!visiblePriceOptions.length) return {} as Record<string, number>;
 
-      const totalSelected = Object.values(next).reduce((acc, value) => acc + value, 0);
-      if (totalSelected === 0) {
-        const baseOption = visiblePriceOptions.find((option) => option.isBase);
-        next[(baseOption || visiblePriceOptions[0]).id] = 1;
-      }
-
-      return next;
+    const next: Record<string, number> = {};
+    visiblePriceOptions.forEach((option) => {
+      next[option.id] = priceQuantities[option.id] ?? 0;
     });
-  }, [visiblePriceOptions]);
+
+    const totalSelected = Object.values(next).reduce((acc, value) => acc + value, 0);
+    if (totalSelected === 0) {
+      const baseOption = visiblePriceOptions.find((option) => option.isBase);
+      next[(baseOption || visiblePriceOptions[0]).id] = 1;
+    }
+
+    return next;
+  }, [priceQuantities, visiblePriceOptions]);
 
   const totalPeople = useMemo(
-    () => visiblePriceOptions.reduce((acc, option) => acc + (priceQuantities[option.id] ?? 0), 0),
-    [priceQuantities, visiblePriceOptions],
+    () => visiblePriceOptions.reduce((acc, option) => acc + (normalizedPriceQuantities[option.id] ?? 0), 0),
+    [normalizedPriceQuantities, visiblePriceOptions],
   );
 
   const subtotal = useMemo(
-    () => visiblePriceOptions.reduce((acc, option) => acc + (priceQuantities[option.id] ?? 0) * option.price, 0),
-    [priceQuantities, visiblePriceOptions],
+    () => visiblePriceOptions.reduce((acc, option) => acc + (normalizedPriceQuantities[option.id] ?? 0) * option.price, 0),
+    [normalizedPriceQuantities, visiblePriceOptions],
   );
   const serviceFee = useMemo(() => subtotal * 0.06, [subtotal]);
   const total = useMemo(() => subtotal + serviceFee, [subtotal, serviceFee]);
 
-  const selectedDate = useMemo(
-    () => availability.find((item) => item.id === selectedDateId) ?? availability[0],
-    [availability, selectedDateId],
-  );
+  const activeSelectedDateKey =
+    selectedDateKey ?? (availability[0] ? String(availability[0].date).slice(0, 10) : availabilityConfig.mode === "OPEN" ? toDateKey(new Date()) : null);
 
   const availabilityByDateKey = useMemo(() => {
     const map = new Map<string, Availability>();
@@ -354,6 +521,47 @@ export default function ReservarPage() {
     });
     return map;
   }, [availability]);
+
+  const selectedDate = useMemo(() => {
+    const key = activeSelectedDateKey;
+    if (!key) return availability[0] ?? null;
+
+    const explicit = availabilityByDateKey.get(key);
+    if (explicit) return explicit;
+
+    if (availabilityConfig.mode === "OPEN") {
+      return {
+        id: 0,
+        date: `${key}T09:00:00.000Z`,
+        maxPeople: availabilityConfig.openSchedule.maxPeople,
+        timeSlots: buildTimeSlotsFromSchedule(availabilityConfig.openSchedule),
+      } satisfies Availability;
+    }
+
+    return null;
+  }, [activeSelectedDateKey, availability, availabilityByDateKey, availabilityConfig]);
+
+  const openScheduleSlots = useMemo(
+    () => buildTimeSlotsFromSchedule(availabilityConfig.openSchedule),
+    [availabilityConfig.openSchedule],
+  );
+
+  const selectedDateTimeOptions = useMemo(() => {
+    if (!selectedDate) return [] as string[];
+    const fromDate = normalizeTimeSlots(selectedDate.timeSlots);
+    if (fromDate.length) return fromDate;
+    if (availabilityConfig.mode === "OPEN") return openScheduleSlots;
+    return [] as string[];
+  }, [availabilityConfig.mode, openScheduleSlots, selectedDate]);
+
+  const calendarHasOpenAvailability = availabilityConfig.mode === "OPEN";
+
+  const effectiveSelectedTime =
+    selectedDateTimeOptions.length === 0
+      ? "Por coordinar"
+      : selectedDateTimeOptions.includes(selectedTime)
+        ? selectedTime
+        : selectedDateTimeOptions[0];
 
   const calendarDays = useMemo(() => {
     if (!visibleMonth) return [] as Array<Date | null>;
@@ -404,7 +612,7 @@ export default function ReservarPage() {
         name: option.name,
         unitPrice: option.price,
         isFree: option.isFree,
-        quantity: priceQuantities[option.id] ?? 0,
+        quantity: normalizedPriceQuantities[option.id] ?? 0,
       }))
       .filter((item) => item.quantity > 0);
 
@@ -413,8 +621,9 @@ export default function ReservarPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tourId,
-          availabilityId: selectedDate?.id,
+          tourId: tour.id,
+          availabilityId: selectedDate && selectedDate.id > 0 ? selectedDate.id : null,
+          selectedDate: activeSelectedDateKey,
           people,
           selectedPrices,
           name,
@@ -424,7 +633,7 @@ export default function ReservarPage() {
           phone,
           hotel,
           paymentMethod: payMethod,
-          scheduleTime: selectedTime,
+          scheduleTime: effectiveSelectedTime,
           packageId: selectedPackage?.id,
           packageTitle: selectedPackage?.title,
         }),
@@ -530,22 +739,30 @@ export default function ReservarPage() {
 
                   const key = toDateKey(day);
                   const available = availabilityByDateKey.get(key);
-                  const isActive = available?.id === selectedDateId;
+                  const canSelect = Boolean(available) || calendarHasOpenAvailability;
+                  const isActive = activeSelectedDateKey === key;
+
+                  const openMaxLabel = availabilityConfig.openSchedule.maxPeople;
+                  const tooltip = available
+                    ? `${available.maxPeople} lugares max.`
+                    : calendarHasOpenAvailability
+                      ? `Modo abierto: ${openMaxLabel} lugares max.`
+                      : "No disponible";
 
                   return (
                     <button
                       key={key}
                       type="button"
-                      disabled={!available}
-                      onClick={() => setSelectedDateId(available?.id ?? null)}
+                      disabled={!canSelect}
+                      onClick={() => setSelectedDateKey(key)}
                       className={`h-10 rounded-md border text-sm font-bold transition ${
                         isActive
                           ? "border-emerald-700 bg-emerald-700 text-white"
-                          : available
+                          : canSelect
                             ? "border-emerald-300 bg-emerald-50 text-emerald-900 hover:border-emerald-400"
                             : "cursor-not-allowed border-slate-200 bg-white text-slate-300"
                       }`}
-                      title={available ? `${available.maxPeople} lugares max.` : "No disponible"}
+                      title={tooltip}
                     >
                       {day.getDate()}
                     </button>
@@ -562,13 +779,13 @@ export default function ReservarPage() {
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-600">Elige el horario</label>
                 <select
-                  value={selectedTime}
+                  value={effectiveSelectedTime}
                   onChange={(e) => setSelectedTime(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-800"
                 >
-                  {timeOptions.map((option) => (
+                  {(selectedDateTimeOptions.length ? selectedDateTimeOptions : ["Por coordinar"]).map((option) => (
                     <option key={option} value={option}>
-                      {option}
+                      {option === "Por coordinar" ? option : formatTimeLabel(option)}
                     </option>
                   ))}
                 </select>
@@ -607,20 +824,20 @@ export default function ReservarPage() {
                           onClick={() =>
                             setPriceQuantities((prev) => ({
                               ...prev,
-                              [option.id]: Math.max(0, (prev[option.id] ?? 0) - 1),
+                              [option.id]: Math.max(0, (normalizedPriceQuantities[option.id] ?? 0) - 1),
                             }))
                           }
                         >
                           -
                         </button>
-                        <span className="w-8 text-center font-bold">{priceQuantities[option.id] ?? 0}</span>
+                        <span className="w-8 text-center font-bold">{normalizedPriceQuantities[option.id] ?? 0}</span>
                         <button
                           type="button"
                           className="rounded border border-slate-300 px-2 py-1 font-bold"
                           onClick={() =>
                             setPriceQuantities((prev) => ({
                               ...prev,
-                              [option.id]: (prev[option.id] ?? 0) + 1,
+                              [option.id]: (normalizedPriceQuantities[option.id] ?? 0) + 1,
                             }))
                           }
                         >
@@ -758,16 +975,16 @@ export default function ReservarPage() {
               <p className="text-sm font-extrabold text-slate-900">{tour.title}</p>
               {selectedPackage && <p className="text-xs font-semibold text-emerald-700">Paquete: {selectedPackage.title}</p>}
               <p className="text-xs text-slate-600">{selectedDate ? new Date(selectedDate.date).toLocaleDateString("es-ES") : "Fecha por confirmar"}</p>
-              <p className="text-xs text-slate-600">{selectedTime} | {totalPeople} pers.</p>
+              <p className="text-xs text-slate-600">{normalizeTime24(effectiveSelectedTime) ? formatTimeLabel(effectiveSelectedTime) : effectiveSelectedTime} | {totalPeople} pers.</p>
             </div>
           </div>
 
           <div className="mt-3 space-y-1 text-xs text-slate-600">
             {visiblePriceOptions
-              .filter((option) => (priceQuantities[option.id] ?? 0) > 0)
+              .filter((option) => (normalizedPriceQuantities[option.id] ?? 0) > 0)
               .map((option) => (
                 <p key={`summary-${option.id}`}>
-                  {option.name}: {priceQuantities[option.id] ?? 0} x {formatOptionPrice(option)}
+                  {option.name}: {normalizedPriceQuantities[option.id] ?? 0} x {formatOptionPrice(option)}
                 </p>
               ))}
           </div>

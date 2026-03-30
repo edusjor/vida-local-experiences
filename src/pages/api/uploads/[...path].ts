@@ -1,4 +1,5 @@
-import fs from 'fs/promises';
+import fs from 'fs';
+import { stat } from 'fs/promises';
 import path from 'path';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
@@ -13,6 +14,11 @@ function getContentType(filePath: string): string {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.setHeader('Allow', 'GET, HEAD');
+    return res.status(405).end('Method not allowed');
+  }
+
   const parts = Array.isArray(req.query.path) ? req.query.path : [];
   if (!parts.length) {
     return res.status(404).end('Not found');
@@ -26,10 +32,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const file = await fs.readFile(targetPath);
+    const fileStats = await stat(targetPath);
+    if (!fileStats.isFile()) {
+      return res.status(404).end('Not found');
+    }
+
     res.setHeader('Content-Type', getContentType(targetPath));
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    return res.status(200).send(file);
+    res.setHeader('Content-Length', String(fileStats.size));
+
+    if (req.method === 'HEAD') {
+      return res.status(200).end();
+    }
+
+    const stream = fs.createReadStream(targetPath);
+    stream.on('error', () => {
+      if (!res.headersSent) {
+        res.status(404).end('Not found');
+        return;
+      }
+
+      res.destroy();
+    });
+
+    stream.pipe(res);
+    return;
   } catch {
     return res.status(404).end('Not found');
   }

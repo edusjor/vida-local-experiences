@@ -21,12 +21,14 @@ interface TourPackage {
 interface Tour {
   id: number;
   title: string;
+  slug: string;
   description: string;
   price: number;
   images: string[];
   category: { name: string };
   country?: string;
   zone?: string;
+  departurePoint?: string;
   durationDays?: number;
   guideType?: string;
   transport?: string;
@@ -40,14 +42,9 @@ interface Tour {
 }
 
 const LOCAL_TOURS_KEY = "toursAdminLocalTours";
+const TOUR_PLACEHOLDER_IMAGE = "/tour-placeholder.svg";
 
 interface TourDetailView {
-  place: string;
-  duration: string;
-  guideType: string;
-  transport: string;
-  groups: string;
-  summary: string;
   includes?: string[];
   recommendations?: string[];
   faqs?: Array<{ question: string; answer: string }>;
@@ -136,6 +133,16 @@ function getDurationLabel(days?: number): string {
   return parts.length ? parts.join(' ') : 'A confirmar';
 }
 
+function slugifyTourValue(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
 function safeParse<T>(value: string | null, fallback: T): T {
   if (!value) return fallback;
   try {
@@ -168,9 +175,7 @@ function shiftMonth(date: Date, amount: number): Date {
 function normalizeTour(raw: Partial<Tour> | null | undefined): Tour | null {
   if (!raw?.id || !raw.title || !raw.description) return null;
 
-  const fallbackImage =
-    "https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1200&q=80";
-  const safeImages = Array.isArray(raw.images) && raw.images.length ? raw.images : [fallbackImage];
+  const safeImages = Array.isArray(raw.images) && raw.images.length ? raw.images : [TOUR_PLACEHOLDER_IMAGE];
 
   const hasIncludedItems = Object.prototype.hasOwnProperty.call(raw, "includedItems");
   const hasRecommendations = Object.prototype.hasOwnProperty.call(raw, "recommendations");
@@ -180,12 +185,14 @@ function normalizeTour(raw: Partial<Tour> | null | undefined): Tour | null {
   return {
     id: raw.id,
     title: raw.title,
+    slug: typeof raw.slug === "string" && raw.slug.trim() ? raw.slug : slugifyTourValue(raw.title),
     description: raw.description,
     price: typeof raw.price === "number" ? raw.price : 0,
     images: safeImages,
     category: { name: raw.category?.name ?? "Tour" },
     country: typeof raw.country === "string" ? raw.country : undefined,
     zone: typeof raw.zone === "string" ? raw.zone : undefined,
+    departurePoint: typeof raw.departurePoint === "string" ? raw.departurePoint : undefined,
     durationDays: typeof raw.durationDays === "number" ? raw.durationDays : undefined,
     guideType: typeof raw.guideType === "string" ? raw.guideType : undefined,
     transport: typeof raw.transport === "string" ? raw.transport : undefined,
@@ -205,14 +212,18 @@ function normalizeTour(raw: Partial<Tour> | null | undefined): Tour | null {
   };
 }
 
-function getLocalTourById(id: number): Tour | null {
+function getLocalTourBySlug(slug: string): Tour | null {
   const localTours = safeParse<Partial<Tour>[]>(localStorage.getItem(LOCAL_TOURS_KEY), []);
-  const match = localTours.find((tour) => Number(tour.id) === id);
+  const match = localTours.find((tour) => {
+    const candidateSlug = typeof tour.slug === "string" && tour.slug.trim() ? tour.slug : slugifyTourValue(String(tour.title ?? ""));
+    return candidateSlug === slug;
+  });
   return normalizeTour(match);
 }
 
 export default function TourDetailPage() {
   const params = useParams();
+  const tourSlug = typeof params?.slug === "string" ? params.slug : "";
   const [tour, setTour] = useState<Tour | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [selectedAvailabilityDate, setSelectedAvailabilityDate] = useState<string>("");
@@ -221,22 +232,14 @@ export default function TourDetailPage() {
   const [heroIndex, setHeroIndex] = useState(0);
   const [galleryMainIndex, setGalleryMainIndex] = useState(0);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const tourId = typeof params?.id === "string" ? params.id : "";
 
   useEffect(() => {
-    if (!tourId) {
+    if (!tourSlug) {
       setLoading(false);
       return;
     }
 
-    const parsedId = Number(tourId);
-    if (!Number.isFinite(parsedId)) {
-      setTour(null);
-      setLoading(false);
-      return;
-    }
-
-    fetch(`/api/tour?id=${tourId}`)
+    fetch(`/api/tour?slug=${encodeURIComponent(tourSlug)}`)
       .then((res) => res.json())
       .then((data) => {
         const normalizedRemote = normalizeTour(data);
@@ -245,7 +248,7 @@ export default function TourDetailPage() {
           return;
         }
 
-        const localTour = getLocalTourById(parsedId);
+        const localTour = getLocalTourBySlug(tourSlug);
         if (localTour) {
           setTour(localTour);
           return;
@@ -254,7 +257,7 @@ export default function TourDetailPage() {
         setTour(null);
       })
       .catch(() => {
-        const localTour = getLocalTourById(parsedId);
+        const localTour = getLocalTourBySlug(tourSlug);
         if (localTour) {
           setTour(localTour);
           return;
@@ -263,18 +266,12 @@ export default function TourDetailPage() {
         setTour(null);
       })
       .finally(() => setLoading(false));
-  }, [tourId]);
+  }, [tourSlug]);
 
   const detail: TourDetailView | null = useMemo(() => {
     if (!tour) return null;
 
     return {
-      place: [tour.zone, tour.country].filter(Boolean).join(", ") || "Costa Rica",
-      duration: getDurationLabel(tour.durationDays),
-      guideType: tour.guideType ?? "Guia local",
-      transport: tour.transport ?? "Coordinado al reservar",
-      groups: tour.groups ?? "Grupos pequenos",
-      summary: tour.description,
       includes: tour.includedItems,
       recommendations: tour.recommendations,
       faqs: tour.faqs,
@@ -388,7 +385,7 @@ export default function TourDetailPage() {
     setHeroIndex(0);
     setGalleryMainIndex(0);
     setLightboxIndex(null);
-  }, [tourId]);
+  }, [tourSlug]);
 
   useEffect(() => {
     if (imagesForView.length <= 1) return;
@@ -435,7 +432,7 @@ export default function TourDetailPage() {
   const sideTopIndex = slideNext(galleryMainIndex);
   const sideBottomIndex = slideNext(sideTopIndex);
 
-  const reserveHref = `/tours/${tour.id}/reservar${selectedPackage ? `?package=${encodeURIComponent(selectedPackage.id)}${selectedAvailabilityDate ? `&date=${encodeURIComponent(selectedAvailabilityDate)}` : ""}` : selectedAvailabilityDate ? `?date=${encodeURIComponent(selectedAvailabilityDate)}` : ""}`;
+  const reserveHref = `/tours/${tour.slug}/reservar${selectedPackage ? `?package=${encodeURIComponent(selectedPackage.id)}${selectedAvailabilityDate ? `&date=${encodeURIComponent(selectedAvailabilityDate)}` : ""}` : selectedAvailabilityDate ? `?date=${encodeURIComponent(selectedAvailabilityDate)}` : ""}`;
 
   return (
     <section className="relative overflow-hidden bg-[radial-gradient(circle_at_15%_10%,rgba(16,185,129,0.11),transparent_42%),radial-gradient(circle_at_90%_85%,rgba(245,158,11,0.12),transparent_38%),linear-gradient(180deg,#f8fbfa_0%,#ecf3f1_100%)]">
@@ -451,10 +448,14 @@ export default function TourDetailPage() {
           <div className="max-w-3xl">
             <div className="mb-3 flex flex-wrap gap-2 text-xs font-bold uppercase tracking-wide">
               <span className="rounded-full bg-emerald-50/90 px-3 py-1 text-emerald-700">{tour.category?.name ?? "Tour"}</span>
-              <span className="rounded-full bg-emerald-50/90 px-3 py-1 text-emerald-700">{detail.duration}</span>
+              {getDurationLabel(tour.durationDays) && (
+                <span className="rounded-full bg-emerald-50/90 px-3 py-1 text-emerald-700">{getDurationLabel(tour.durationDays)}</span>
+              )}
             </div>
             <h1 className="text-3xl font-extrabold leading-tight text-slate-900 md:text-5xl">{tour.title}</h1>
-            <p className="mt-3 text-sm text-slate-700">{detail.place}</p>
+            {[tour.zone, tour.country].filter(Boolean).length > 0 && (
+              <p className="mt-3 text-sm text-slate-700">{[tour.zone, tour.country].filter(Boolean).join(", ")}</p>
+            )}
             <a
               href={reserveHref}
               className="mt-6 inline-block rounded-xl bg-amber-400 px-6 py-3 font-extrabold text-slate-900 transition hover:bg-amber-300"
@@ -529,6 +530,53 @@ export default function TourDetailPage() {
           <article className="mt-7 rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
             <h2 className="text-2xl font-extrabold text-slate-900">Detalles generales</h2>
             <p className="mt-3 whitespace-pre-line leading-relaxed text-slate-700">{tour.description}</p>
+
+            {(getDurationLabel(tour.durationDays) !== "A confirmar" || tour.guideType || tour.transport || tour.groups || [tour.zone, tour.country].filter(Boolean).length > 0 || tour.departurePoint || sortedAvailability[0]) && (
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                {getDurationLabel(tour.durationDays) !== "A confirmar" && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Duracion</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{getDurationLabel(tour.durationDays)}</p>
+                  </div>
+                )}
+                {tour.guideType && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Guia</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{tour.guideType}</p>
+                  </div>
+                )}
+                {tour.transport && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Transporte</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{tour.transport}</p>
+                  </div>
+                )}
+                {tour.groups && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Tamano de grupo</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{tour.groups}</p>
+                  </div>
+                )}
+                {[tour.zone, tour.country].filter(Boolean).length > 0 && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Ubicacion del tour</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{[tour.zone, tour.country].filter(Boolean).join(", ")}</p>
+                  </div>
+                )}
+                {tour.departurePoint && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Punto de salida</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{tour.departurePoint}</p>
+                  </div>
+                )}
+                {sortedAvailability[0] && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:col-span-2">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Proxima fecha</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{new Date(sortedAvailability[0].date).toLocaleDateString()}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </article>
 
           {Boolean(tour.tourPackages?.length) && (
@@ -612,14 +660,6 @@ export default function TourDetailPage() {
         <aside className="rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_10px_35px_rgba(15,23,42,0.09)] backdrop-blur-sm lg:sticky lg:top-6 lg:h-fit">
           <p className="text-4xl font-black text-emerald-800">{detailPricePreview.label}</p>
           <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">Precio segun tipo seleccionado</p>
-          <div className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-700">
-            <p>- Duracion: {detail.duration}</p>
-            <p>- {detail.guideType}</p>
-            <p>- {detail.transport}</p>
-            <p>- {detail.groups}</p>
-            <p>- Punto de salida: {detail.place}</p>
-            <p>- Proxima fecha: {sortedAvailability[0] ? new Date(sortedAvailability[0].date).toLocaleDateString() : "A confirmar"}</p>
-          </div>
 
           <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <p className="text-sm font-extrabold text-slate-800">Consulta disponibilidad</p>

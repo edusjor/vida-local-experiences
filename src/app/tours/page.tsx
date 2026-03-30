@@ -21,6 +21,7 @@ interface TourPackage {
 interface Tour {
   id: number;
   title: string;
+  slug: string;
   description: string;
   price: number;
   priceOptions?: TourPriceOption[];
@@ -55,6 +56,7 @@ interface FilterConfig {
 
 const LOCAL_TOURS_KEY = "toursAdminLocalTours";
 const FILTER_CONFIG_KEY = "toursFilterConfig";
+const TOUR_PLACEHOLDER_IMAGE = "/tour-placeholder.svg";
 
 const defaultFilterConfig: FilterConfig = {
   country: true,
@@ -178,6 +180,15 @@ function getTourPriceLabel(tour: Tour): string {
   const effectivePrice = getEffectiveTourPrice(tour);
   if (effectivePrice === 0) return "Gratis";
   return `$${effectivePrice.toFixed(2)}`;
+}
+
+function getTourLocationLabel(tour: Tour): string {
+  const location = [tour.zone, tour.country]
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+
+  if (!location.length) return "";
+  return location.join(", ");
 }
 
 export default function ToursPage() {
@@ -386,12 +397,6 @@ export default function ToursPage() {
         <h2 className="text-4xl font-extrabold">Explora nuestros tours</h2>
       </div>
 
-      <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4">
-        <p className="max-w-3xl text-sm font-semibold text-emerald-900 md:text-base">
-          Busca por nombre y filtra por pais, precio, duracion y tipo de actividad.
-        </p>
-      </div>
-
       <div className="mt-6 grid gap-6 lg:grid-cols-[290px_1fr]">
         <aside className="h-fit rounded-3xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50 p-5 shadow-xl shadow-slate-300/40 lg:sticky lg:top-6">
           <h3 className="text-lg font-extrabold text-slate-900">Filtros</h3>
@@ -529,43 +534,33 @@ export default function ToursPage() {
 
           <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             {filteredTours.map((tour) => (
+              (() => {
+                const locationLabel = getTourLocationLabel(tour);
+                return (
               <article key={tour.id} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-xl shadow-slate-300/40">
                 <div className="relative">
-                  <img src={tour.images[0]} alt={tour.title} className="h-44 w-full object-cover" />
+                  <img src={tour.images?.[0] || TOUR_PLACEHOLDER_IMAGE} alt={tour.title} className="h-44 w-full object-cover" />
                   {tour.featured && (
                     <span className="absolute left-3 top-3 rounded-full bg-amber-400 px-3 py-1 text-xs font-black text-slate-900">Destacado</span>
                   )}
                 </div>
                 <div className="flex flex-1 flex-col p-5">
                   <p className="text-xs font-extrabold uppercase tracking-wide text-emerald-700">{tour.category?.name ?? "Tour"}</p>
-                  <h3 className="mt-1 text-2xl font-extrabold text-slate-900">{tour.title}</h3>
+                  <h3 className="mt-1 line-clamp-3 min-h-[6.25rem] text-2xl font-extrabold leading-tight text-slate-900">{tour.title}</h3>
                   <p className="mt-2 line-clamp-3 whitespace-pre-line text-slate-600">{tour.description}</p>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {tour.country && (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                        {tour.country}
+                  <div className="mt-3 min-h-10">
+                    {locationLabel && (
+                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                        {locationLabel}
                       </span>
                     )}
-                    {tour.zone && (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                        {tour.zone}
-                      </span>
-                    )}
-                    {typeof tour.durationDays === "number" && tour.durationDays > 0 && (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                        {tour.durationDays} dia(s)
-                      </span>
-                    )}
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                      {tour.activityType || "Todos"}
-                    </span>
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between gap-3">
+                  <div className="mt-auto flex items-center justify-between gap-3 pt-4">
                     <span className="text-3xl font-black text-emerald-600">{getTourPriceLabel(tour)}</span>
                     <Link
-                      href={`/tours/${tour.id}`}
+                      href={`/tours/${tour.slug}`}
                       className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-extrabold text-slate-900 transition hover:bg-amber-300"
                     >
                       Ver detalles
@@ -573,6 +568,8 @@ export default function ToursPage() {
                   </div>
                 </div>
               </article>
+                );
+              })()
             ))}
           </div>
 

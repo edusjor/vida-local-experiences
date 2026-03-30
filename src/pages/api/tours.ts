@@ -5,5 +5,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const tours = await prisma.tour.findMany({
     include: { category: true, availability: true },
   });
-  res.status(200).json(tours);
+  // Prisma ya incluye slug, pero si algún tour no lo tiene, lo forzamos a string vacío para evitar undefined
+  const toursWithSlug = tours.map(t => ({ ...t, slug: t.slug || "" }));
+  res.status(200).json(toursWithSlug);
 }

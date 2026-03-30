@@ -1,20 +1,38 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type TourStatus = "ACTIVO" | "NO_ACTIVO" | "BORRADOR";
 type TourTab = "ACTIVOS" | "BORRADOR" | "DESACTIVADOS" | "PAPELERA";
+type AvailabilityMode = "SPECIFIC" | "OPEN";
+
+interface OpenScheduleConfig {
+  maxPeople: number;
+  startTime: string;
+  endTime: string;
+  intervalMinutes: number;
+  useCustomTimes: boolean;
+  customTimesText: string;
+}
+
+interface AvailabilityConfig {
+  mode: AvailabilityMode;
+  openSchedule: OpenScheduleConfig;
+  dateSchedules: Record<string, string[]>;
+}
 
 interface TourEditorState {
   editingTourId: number | null;
   title: string;
+  slug: string;
   description: string;
   minPeople: number;
   imageList: string[];
   categoryId: number | null;
   country: string;
   zone: string;
+  departurePoint: string;
   durationDays: number | "";
   activityType: string;
   difficulty: string;
@@ -27,6 +45,7 @@ interface TourEditorState {
   recommendationsText: string;
   faqsList: FaqItem[];
   availabilityList: AvailabilityItem[];
+  availabilityConfig: AvailabilityConfig;
   status: TourStatus;
   featured: boolean;
 }
@@ -40,6 +59,7 @@ interface AvailabilityItem {
   id: number;
   date: string;
   maxPeople: number;
+  timeSlots?: string[];
 }
 
 interface PriceOptionEditor {
@@ -77,6 +97,7 @@ interface CategoryInput {
 interface TourAdminView {
   id: number;
   title: string;
+  slug?: string;
   description: string;
   price: number;
   minPeople?: number;
@@ -87,6 +108,7 @@ interface TourAdminView {
   deletedAt?: string | null;
   country?: string;
   zone?: string;
+  departurePoint?: string;
   durationDays?: number;
   activityType?: string;
   difficulty?: string;
@@ -100,6 +122,7 @@ interface TourAdminView {
   recommendations?: string[];
   faqs?: FaqItem[];
   availability?: AvailabilityItem[];
+  availabilityConfig?: AvailabilityConfig;
   featured?: boolean;
 }
 
@@ -129,6 +152,17 @@ const defaultFilterConfig: FilterConfig = {
   featured: true,
 };
 
+const filterConfigLabels: Record<keyof FilterConfig, string> = {
+  country: "Pais",
+  zone: "Zona",
+  price: "Precio",
+  durationDays: "Duracion (dias)",
+  activityType: "Tipo de actividad",
+  category: "Categoria",
+  difficulty: "Dificultad",
+  featured: "Destacado",
+};
+
 const fallbackCategories: Category[] = [
   { id: 1, name: "Playa", description: "Experiencias de playa y mar" },
   { id: 2, name: "Aventura", description: "Tours con adrenalina y deporte" },
@@ -145,6 +179,150 @@ const defaultPriceOptionNames = [
   "Niños extranjeros",
 ];
 
+function normalizeTime24(value: string): string | null {
+  const trimmed = String(value ?? "").trim();
+  const match = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function toMinutes(time24: string): number {
+  const [hours, minutes] = time24.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function formatTimeLabel(time24: string): string {
+  const [hoursRaw, minutesRaw] = time24.split(":").map(Number);
+  const suffix = hoursRaw >= 12 ? "PM" : "AM";
+  const hours = hoursRaw % 12 || 12;
+  return `${hours}:${String(minutesRaw).padStart(2, "0")} ${suffix}`;
+}
+
+function normalizeTimeSlots(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+  return Array.from(
+    new Set(
+      items
+        .map((item) => normalizeTime24(String(item)))
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).sort();
+}
+
+function parseCustomTimeSlots(input: string): string[] {
+  return Array.from(
+    new Set(
+      String(input || "")
+        .split(/[\n,;]+/)
+        .map((item) => normalizeTime24(item))
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).sort();
+}
+
+function buildIntervalTimeSlots(startTime: string, endTime: string, intervalMinutes: number): string[] {
+  const start = normalizeTime24(startTime);
+  const end = normalizeTime24(endTime);
+  const safeInterval = Number.isFinite(intervalMinutes) ? Math.floor(intervalMinutes) : 0;
+
+  if (!start || !end || safeInterval <= 0) return [];
+
+  const startMin = toMinutes(start);
+  const endMin = toMinutes(end);
+  if (startMin > endMin) return [];
+
+  const slots: string[] = [];
+  for (let min = startMin; min <= endMin; min += safeInterval) {
+    const hours = Math.floor(min / 60);
+    const minutes = min % 60;
+    slots.push(`${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`);
+  }
+
+  return slots;
+}
+
+const defaultOpenSchedule: OpenScheduleConfig = {
+  maxPeople: 10,
+  startTime: "08:00",
+  endTime: "17:00",
+  intervalMinutes: 30,
+  useCustomTimes: false,
+  customTimesText: "",
+};
+
+const defaultAvailabilityConfig: AvailabilityConfig = {
+  mode: "SPECIFIC",
+  openSchedule: defaultOpenSchedule,
+  dateSchedules: {},
+};
+
+function buildTimeSlotsFromSchedule(config: OpenScheduleConfig): string[] {
+  return config.useCustomTimes
+    ? parseCustomTimeSlots(config.customTimesText)
+    : buildIntervalTimeSlots(config.startTime, config.endTime, config.intervalMinutes);
+}
+
+function normalizeOpenScheduleConfig(input: unknown): OpenScheduleConfig {
+  if (!input || typeof input !== "object") return defaultOpenSchedule;
+  const source = input as Partial<OpenScheduleConfig>;
+  const parsedMaxPeople = Number(source.maxPeople);
+  const parsedInterval = Number(source.intervalMinutes);
+
+  return {
+    maxPeople: Number.isFinite(parsedMaxPeople) && parsedMaxPeople > 0 ? Math.floor(parsedMaxPeople) : defaultOpenSchedule.maxPeople,
+    startTime: normalizeTime24(String(source.startTime ?? defaultOpenSchedule.startTime)) ?? defaultOpenSchedule.startTime,
+    endTime: normalizeTime24(String(source.endTime ?? defaultOpenSchedule.endTime)) ?? defaultOpenSchedule.endTime,
+    intervalMinutes: Number.isFinite(parsedInterval) && parsedInterval > 0 ? Math.floor(parsedInterval) : defaultOpenSchedule.intervalMinutes,
+    useCustomTimes: Boolean(source.useCustomTimes),
+    customTimesText: String(source.customTimesText ?? ""),
+  };
+}
+
+function normalizeAvailabilityConfig(input: unknown): AvailabilityConfig {
+  if (!input || typeof input !== "object") return defaultAvailabilityConfig;
+  const source = input as Partial<AvailabilityConfig>;
+  const dateSchedulesRaw = source.dateSchedules;
+  const dateSchedules: Record<string, string[]> = {};
+
+  if (dateSchedulesRaw && typeof dateSchedulesRaw === "object" && !Array.isArray(dateSchedulesRaw)) {
+    Object.entries(dateSchedulesRaw).forEach(([dateKey, slots]) => {
+      dateSchedules[dateKey] = normalizeTimeSlots(slots);
+    });
+  }
+
+  return {
+    mode: source.mode === "OPEN" ? "OPEN" : "SPECIFIC",
+    openSchedule: normalizeOpenScheduleConfig(source.openSchedule),
+    dateSchedules,
+  };
+}
+
+function buildDateSchedulesFromAvailability(items: AvailabilityItem[]): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  items.forEach((item) => {
+    const dateKey = String(item.date || "").slice(0, 10);
+    if (!dateKey) return;
+    result[dateKey] = normalizeTimeSlots(item.timeSlots);
+  });
+  return result;
+}
+
+function applyDateSchedulesToAvailability(items: AvailabilityItem[], dateSchedules: Record<string, string[]>): AvailabilityItem[] {
+  return items.map((item) => {
+    const dateKey = String(item.date || "").slice(0, 10);
+    return {
+      ...item,
+      timeSlots: dateKey ? normalizeTimeSlots(dateSchedules[dateKey] ?? item.timeSlots) : normalizeTimeSlots(item.timeSlots),
+    };
+  });
+}
+
 function slugifyPriceLabel(value: string): string {
   return value
     .toLowerCase()
@@ -152,6 +330,18 @@ function slugifyPriceLabel(value: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+}
+
+function slugifyTourValue(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+  return normalized;
 }
 
 function createDefaultPriceOptions(): PriceOptionEditor[] {
@@ -337,6 +527,25 @@ function safeParse<T>(value: string | null, fallback: T): T {
   }
 }
 
+function getStoredFilterConfig(): FilterConfig {
+  if (typeof window === "undefined") return defaultFilterConfig;
+
+  const stored = safeParse<FilterConfig>(localStorage.getItem(FILTER_CONFIG_KEY), defaultFilterConfig);
+  return { ...defaultFilterConfig, ...stored };
+}
+
+function sanitizeOpenPackageIds(
+  openIds: string[],
+  packages: TourPackageEditor[],
+  openMode: "multiple" | "single",
+): string[] {
+  const validIds = openIds.filter((id) => packages.some((pkg) => pkg.id === id));
+  if (!packages.length) return [];
+  if (!validIds.length) return [packages[0].id];
+  if (openMode === "single" && validIds.length > 1) return [validIds[0]];
+  return validIds;
+}
+
 function normalizeCategory(input: CategoryInput): Category | null {
   const source = input?.category && typeof input.category === "object" ? input.category : input;
   const id = Number(source?.id);
@@ -473,37 +682,6 @@ function downloadCsv(content: string, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-function parseCsvRow(line: string): string[] {
-  const values: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === "," && !inQuotes) {
-      values.push(current.trim());
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  values.push(current.trim());
-  return values;
-}
-
 function parseCsvTable(text: string): string[][] {
   const rows: string[][] = [];
   let currentRow: string[] = [];
@@ -620,21 +798,6 @@ function parseFaqsFromPipeText(text: string): FaqItem[] {
   return sanitizeFaqs(items);
 }
 
-const defaultIncludedItems = [
-  "Guia profesional",
-  "Soporte de reservas",
-  "Asistencia local",
-  "Confirmacion inmediata",
-];
-
-const defaultRecommendations = ["Ropa comoda", "Protector solar", "Agua", "Documento personal"];
-
-const defaultFaqItems: FaqItem[] = [
-  { question: "Como reservo?", answer: "Haz clic en Reservar ahora y completa tus datos en menos de un minuto." },
-  { question: "Se puede reprogramar?", answer: "Si, sujeto a disponibilidad y politica de cada operador." },
-  { question: "Que pasa si llueve?", answer: "Te contactamos con alternativas disponibles para ese dia." },
-];
-
 const defaultAvailabilityItems: AvailabilityItem[] = [
   { id: 5001, date: "2026-03-20T09:00:00.000Z", maxPeople: 10 },
   { id: 5002, date: "2026-03-21T09:00:00.000Z", maxPeople: 8 },
@@ -642,20 +805,55 @@ const defaultAvailabilityItems: AvailabilityItem[] = [
   { id: 5004, date: "2026-03-27T09:00:00.000Z", maxPeople: 8 },
 ];
 
-function getEffectiveIncludedItems(tour: TourAdminView): string[] {
-  return Array.isArray(tour.includedItems) && tour.includedItems.length ? tour.includedItems : defaultIncludedItems;
-}
+function sanitizeAvailabilityItems(items: unknown): AvailabilityItem[] {
+  if (!Array.isArray(items)) return [];
 
-function getEffectiveRecommendations(tour: TourAdminView): string[] {
-  return Array.isArray(tour.recommendations) && tour.recommendations.length ? tour.recommendations : defaultRecommendations;
-}
+  return items
+    .map((item, index) => {
+      const source = item as { id?: unknown; date?: unknown; maxPeople?: unknown; timeSlots?: unknown };
+      const date = String(source?.date ?? "").trim();
+      const maxPeople = Number(source?.maxPeople ?? 0);
+      const idRaw = Number(source?.id);
 
-function getEffectiveFaqs(tour: TourAdminView): FaqItem[] {
-  return Array.isArray(tour.faqs) && tour.faqs.length ? tour.faqs : defaultFaqItems;
+      return {
+        id: Number.isFinite(idRaw) ? idRaw : index + 1,
+        date,
+        maxPeople: Number.isFinite(maxPeople) && maxPeople > 0 ? Math.floor(maxPeople) : 0,
+        timeSlots: normalizeTimeSlots(source?.timeSlots),
+      } satisfies AvailabilityItem;
+    })
+    .filter((item) => item.date && item.maxPeople > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function getEffectiveAvailability(tour: TourAdminView): AvailabilityItem[] {
-  return Array.isArray(tour.availability) && tour.availability.length ? tour.availability : defaultAvailabilityItems;
+  const sanitized = sanitizeAvailabilityItems(tour.availability);
+  return sanitized.length ? sanitized : defaultAvailabilityItems;
+}
+
+function getEffectiveAvailabilityConfig(tour: TourAdminView, availabilityItems: AvailabilityItem[]): AvailabilityConfig {
+  const base = normalizeAvailabilityConfig(tour.availabilityConfig);
+  const mergedDateSchedules = {
+    ...base.dateSchedules,
+    ...buildDateSchedulesFromAvailability(availabilityItems),
+  };
+
+  return {
+    ...base,
+    dateSchedules: mergedDateSchedules,
+  };
+}
+
+function orderImagesWithFeatured(images: string[], featuredImage: string | null): string[] {
+  const sanitized = images.map((item) => item.trim()).filter(Boolean);
+  if (!sanitized.length) return [];
+  if (!featuredImage) return sanitized;
+
+  const featuredIndex = sanitized.indexOf(featuredImage);
+  if (featuredIndex === -1) return sanitized;
+
+  const [featured] = sanitized.splice(featuredIndex, 1);
+  return [featured, ...sanitized];
 }
 
 function AdminPageContent() {
@@ -675,7 +873,8 @@ function AdminPageContent() {
   const [searchTour, setSearchTour] = useState("");
   const [activeTab, setActiveTab] = useState<TourTab>("ACTIVOS");
   const [itemsPerPage, setItemsPerPage] = useState(20);
-  const [currentPage, setCurrentPage] = useState(1);
+  const paginationScope = `${activeTab}|${searchTour}|${itemsPerPage}`;
+  const [pagination, setPagination] = useState<{ scope: string; page: number }>(() => ({ scope: paginationScope, page: 1 }));
   const [isFilterConfigOpen, setIsFilterConfigOpen] = useState(false);
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -683,12 +882,14 @@ function AdminPageContent() {
 
   const [editingTourId, setEditingTourId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [minPeople, setMinPeople] = useState<number | "">(1);
   const [imageList, setImageList] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [country, setCountry] = useState("");
   const [zone, setZone] = useState("");
+  const [departurePoint, setDeparturePoint] = useState("");
   const [durationDays, setDurationDays] = useState<number | "">("");
   const [activityType, setActivityType] = useState("");
   const [difficulty, setDifficulty] = useState("");
@@ -705,12 +906,22 @@ function AdminPageContent() {
   const [faqQuestionInput, setFaqQuestionInput] = useState("");
   const [faqAnswerInput, setFaqAnswerInput] = useState("");
   const [availabilityList, setAvailabilityList] = useState<AvailabilityItem[]>([]);
+  const [availabilityMode, setAvailabilityMode] = useState<AvailabilityMode>("SPECIFIC");
+  const [openSchedule, setOpenSchedule] = useState<OpenScheduleConfig>(defaultOpenSchedule);
   const [availabilityDateInput, setAvailabilityDateInput] = useState("");
   const [availabilityMaxPeopleInput, setAvailabilityMaxPeopleInput] = useState<number | "">(10);
+  const [availabilityUseCustomTimesInput, setAvailabilityUseCustomTimesInput] = useState(false);
+  const [availabilityCustomTimesInput, setAvailabilityCustomTimesInput] = useState("");
+  const [availabilityStartTimeInput, setAvailabilityStartTimeInput] = useState("08:00");
+  const [availabilityEndTimeInput, setAvailabilityEndTimeInput] = useState("17:00");
+  const [availabilityIntervalInput, setAvailabilityIntervalInput] = useState<number | "">(30);
   const [isFaqBulkOpen, setIsFaqBulkOpen] = useState(false);
   const [faqBulkText, setFaqBulkText] = useState("");
+  const [isGalleryDragActive, setIsGalleryDragActive] = useState(false);
+  const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null);
   const faqCsvInputRef = useRef<HTMLInputElement | null>(null);
   const importToursCsvRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<TourStatus>("BORRADOR");
   const [featured, setFeatured] = useState(false);
 
@@ -721,19 +932,49 @@ function AdminPageContent() {
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [editingCategoryDescription, setEditingCategoryDescription] = useState("");
 
-  const [filterConfig, setFilterConfig] = useState<FilterConfig>(defaultFilterConfig);
+  const [filterConfig, setFilterConfig] = useState<FilterConfig>(() => getStoredFilterConfig());
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [selectedTourIds, setSelectedTourIds] = useState<number[]>([]);
+
+  const previewSpecificSlots = useMemo(() => {
+    if (availabilityUseCustomTimesInput) return parseCustomTimeSlots(availabilityCustomTimesInput);
+    return buildIntervalTimeSlots(
+      availabilityStartTimeInput,
+      availabilityEndTimeInput,
+      Number(availabilityIntervalInput || 0),
+    );
+  }, [availabilityCustomTimesInput, availabilityEndTimeInput, availabilityIntervalInput, availabilityStartTimeInput, availabilityUseCustomTimesInput]);
+
+  const previewOpenSlots = useMemo(() => buildTimeSlotsFromSchedule(openSchedule), [openSchedule]);
+
+  useEffect(() => {
+    if (status !== "BORRADOR") return;
+    setSlug(slugifyTourValue(title));
+  }, [status, title]);
+
+  const setCurrentPage = (value: number | ((prev: number) => number)) => {
+    setPagination((prev) => {
+      const basePage = prev.scope === paginationScope ? prev.page : 1;
+      const nextPage = typeof value === "function" ? value(basePage) : value;
+
+      return {
+        scope: paginationScope,
+        page: Math.max(1, nextPage),
+      };
+    });
+  };
 
   const createEmptyEditorState = (defaultCategoryId: number | null): TourEditorState => ({
     editingTourId: null,
     title: "",
+    slug: "",
     description: "",
     minPeople: 1,
     imageList: [],
     categoryId: defaultCategoryId,
     country: "",
     zone: "",
+    departurePoint: "",
     durationDays: "",
     activityType: "",
     difficulty: "",
@@ -746,6 +987,7 @@ function AdminPageContent() {
     recommendationsText: "",
     faqsList: [],
     availabilityList: defaultAvailabilityItems,
+    availabilityConfig: defaultAvailabilityConfig,
     status: "BORRADOR",
     featured: false,
   });
@@ -753,12 +995,15 @@ function AdminPageContent() {
   const applyEditorState = (state: TourEditorState) => {
     setEditingTourId(state.editingTourId);
     setTitle(state.title);
+    setSlug(state.slug);
     setDescription(state.description);
     setMinPeople(state.minPeople);
     setImageList(state.imageList);
+    setFeaturedImageUrl(state.imageList[0] ?? null);
     setCategoryId(state.categoryId);
     setCountry(state.country);
     setZone(state.zone);
+    setDeparturePoint(state.departurePoint);
     setDurationDays(state.durationDays);
     setActivityType(state.activityType);
     setDifficulty(state.difficulty);
@@ -772,10 +1017,17 @@ function AdminPageContent() {
     setRecommendationsText(state.recommendationsText);
     setFaqsList(state.faqsList);
     setAvailabilityList(state.availabilityList);
+    setAvailabilityMode(state.availabilityConfig.mode);
+    setOpenSchedule(state.availabilityConfig.openSchedule);
     setFaqQuestionInput("");
     setFaqAnswerInput("");
     setAvailabilityDateInput("");
     setAvailabilityMaxPeopleInput(10);
+    setAvailabilityUseCustomTimesInput(false);
+    setAvailabilityCustomTimesInput("");
+    setAvailabilityStartTimeInput("08:00");
+    setAvailabilityEndTimeInput("17:00");
+    setAvailabilityIntervalInput(30);
     setStatus(state.status);
     setFeatured(state.featured);
   };
@@ -783,12 +1035,14 @@ function AdminPageContent() {
   const currentEditorState: TourEditorState = {
     editingTourId,
     title,
+    slug,
     description,
     minPeople: minPeople === "" ? 1 : minPeople,
     imageList,
     categoryId,
     country,
     zone,
+    departurePoint,
     durationDays,
     activityType,
     difficulty,
@@ -801,6 +1055,11 @@ function AdminPageContent() {
     recommendationsText,
     faqsList,
     availabilityList,
+    availabilityConfig: {
+      mode: availabilityMode,
+      openSchedule: normalizeOpenScheduleConfig(openSchedule),
+      dateSchedules: buildDateSchedulesFromAvailability(availabilityList),
+    },
     status,
     featured,
   };
@@ -809,15 +1068,10 @@ function AdminPageContent() {
     isEditorOpen && editorInitial && JSON.stringify(currentEditorState) !== JSON.stringify(editorInitial),
   );
 
-  useEffect(() => {
-    setOpenPackageIds((prev) => {
-      const validIds = prev.filter((id) => tourPackages.some((pkg) => pkg.id === id));
-      if (!tourPackages.length) return [];
-      if (!validIds.length) return [tourPackages[0].id];
-      if (packageOpenMode === "single" && validIds.length > 1) return [validIds[0]];
-      return validIds;
-    });
-  }, [tourPackages, packageOpenMode]);
+  const effectiveOpenPackageIds = useMemo(
+    () => sanitizeOpenPackageIds(openPackageIds, tourPackages, packageOpenMode),
+    [openPackageIds, packageOpenMode, tourPackages],
+  );
 
   const validCategories = useMemo(() => {
     const uniqueCategories = new Map<number, Category>();
@@ -833,16 +1087,13 @@ function AdminPageContent() {
   }, [categories]);
 
   useEffect(() => {
-    const config = safeParse<FilterConfig>(localStorage.getItem(FILTER_CONFIG_KEY), defaultFilterConfig);
-    setFilterConfig({ ...defaultFilterConfig, ...config });
-
     fetch("/api/admin/auth")
       .then((res) => setIsAuthenticated(res.ok))
       .catch(() => setIsAuthenticated(false))
       .finally(() => setIsAuthChecking(false));
   }, []);
 
-  const loadData = () => {
+  const loadData = useCallback(async () => {
     const localCategoriesRaw = safeParse<CategoryInput[]>(localStorage.getItem(LOCAL_CATEGORIES_KEY), []);
     const localCategories = localCategoriesRaw
       .map((category) => normalizeCategory(category))
@@ -864,24 +1115,31 @@ function AdminPageContent() {
         if (!categoryId && mergedCategories[0]) setCategoryId(mergedCategories[0].id);
 
         const remoteTours: TourAdminView[] = Array.isArray(apiTours)
-          ? apiTours.map((tour: TourAdminView) => ({
-              ...tour,
-              status: tour.status ?? "BORRADOR",
-              isDeleted: Boolean(tour.isDeleted),
-              deletedAt: tour.deletedAt ?? null,
-              country: tour.country ?? "",
-              zone: tour.zone ?? "",
-              activityType: tour.activityType ?? "",
-              difficulty: tour.difficulty ?? "",
-              durationDays: tour.durationDays ?? undefined,
-              tourPackages: buildEditorTourPackages(
-                (tour as { tourPackages?: unknown }).tourPackages,
-                (tour as { priceOptions?: unknown }).priceOptions,
-                tour.price,
-              ),
-              featured: tour.featured ?? false,
-              minPeople: Number.isFinite(Number(tour.minPeople)) && Number(tour.minPeople) > 0 ? Number(tour.minPeople) : 1,
-            }))
+          ? apiTours.map((tour: TourAdminView) => {
+              const normalizedAvailability = sanitizeAvailabilityItems(tour.availability);
+              const normalizedAvailabilityConfig = getEffectiveAvailabilityConfig(tour, normalizedAvailability);
+
+              return {
+                ...tour,
+                status: tour.status ?? "BORRADOR",
+                isDeleted: Boolean(tour.isDeleted),
+                deletedAt: tour.deletedAt ?? null,
+                country: tour.country ?? "",
+                zone: tour.zone ?? "",
+                activityType: tour.activityType ?? "",
+                difficulty: tour.difficulty ?? "",
+                durationDays: tour.durationDays ?? undefined,
+                availability: applyDateSchedulesToAvailability(normalizedAvailability, normalizedAvailabilityConfig.dateSchedules),
+                availabilityConfig: normalizedAvailabilityConfig,
+                tourPackages: buildEditorTourPackages(
+                  (tour as { tourPackages?: unknown }).tourPackages,
+                  (tour as { priceOptions?: unknown }).priceOptions,
+                  tour.price,
+                ),
+                featured: tour.featured ?? false,
+                minPeople: Number.isFinite(Number(tour.minPeople)) && Number(tour.minPeople) > 0 ? Number(tour.minPeople) : 1,
+              };
+            })
           : [];
 
         setAllTours(remoteTours);
@@ -894,16 +1152,17 @@ function AdminPageContent() {
         if (!categoryId && categoriesFallback[0]) setCategoryId(categoriesFallback[0].id);
         setAllTours(localTours);
       });
-  };
+  }, [categoryId]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
     loadData();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, loadData]);
 
-  useEffect(() => {
-    setSelectedTourIds((prev) => prev.filter((id) => allTours.some((tour) => tour.id === id)));
-  }, [allTours]);
+  const effectiveSelectedTourIds = useMemo(
+    () => selectedTourIds.filter((id) => allTours.some((tour) => tour.id === id)),
+    [allTours, selectedTourIds],
+  );
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -971,7 +1230,11 @@ function AdminPageContent() {
         return;
       }
 
-      setImageList((prev) => [...prev, ...urls]);
+      setImageList((prev) => {
+        const next = [...prev, ...urls];
+        setFeaturedImageUrl((currentFeatured) => (currentFeatured && next.includes(currentFeatured) ? currentFeatured : next[0] ?? null));
+        return next;
+      });
       setFeedback({ type: "success", message: `Se subieron ${urls.length} imagenes a /uploads/tours.` });
     } catch {
       setFeedback({ type: "error", message: "Error de conexion al subir imagenes." });
@@ -979,15 +1242,54 @@ function AdminPageContent() {
   };
 
   const removeImage = (index: number) => {
-    setImageList((prev) => prev.filter((_, i) => i !== index));
+    setImageList((prev) => {
+      const removedImage = prev[index] ?? null;
+      const next = prev.filter((_, i) => i !== index);
+
+      setFeaturedImageUrl((currentFeatured) => {
+        if (!next.length) return null;
+        if (currentFeatured && next.includes(currentFeatured) && currentFeatured !== removedImage) return currentFeatured;
+        return next[0];
+      });
+
+      return next;
+    });
+  };
+
+  const clearAllImages = () => {
+    setImageList([]);
+    setFeaturedImageUrl(null);
+  };
+
+  const openGalleryPicker = () => {
+    galleryInputRef.current?.click();
+  };
+
+  const handleGalleryDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!isGalleryDragActive) setIsGalleryDragActive(true);
+  };
+
+  const handleGalleryDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setIsGalleryDragActive(false);
+  };
+
+  const handleGalleryDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsGalleryDragActive(false);
+    void handleUploadImages(e.dataTransfer.files);
   };
 
   const resetTourForm = () => {
     setEditingTourId(null);
     setTitle("");
+    setSlug("");
     setDescription("");
     setMinPeople(1);
     setImageList([]);
+    setFeaturedImageUrl(null);
     setCountry("");
     setZone("");
     setDurationDays("");
@@ -1005,10 +1307,17 @@ function AdminPageContent() {
     setRecommendationsText("");
     setFaqsList([]);
     setAvailabilityList(defaultAvailabilityItems);
+    setAvailabilityMode("SPECIFIC");
+    setOpenSchedule(defaultOpenSchedule);
     setFaqQuestionInput("");
     setFaqAnswerInput("");
     setAvailabilityDateInput("");
     setAvailabilityMaxPeopleInput(10);
+    setAvailabilityUseCustomTimesInput(false);
+    setAvailabilityCustomTimesInput("");
+    setAvailabilityStartTimeInput("08:00");
+    setAvailabilityEndTimeInput("17:00");
+    setAvailabilityIntervalInput(30);
     setStatus("BORRADOR");
     setFeatured(false);
     if (categories[0]) setCategoryId(categories[0].id);
@@ -1034,10 +1343,11 @@ function AdminPageContent() {
 
   const togglePackageExpanded = (packageId: string) => {
     setOpenPackageIds((prev) => {
-      const isCurrentlyOpen = prev.includes(packageId);
-      if (isCurrentlyOpen) return prev.filter((id) => id !== packageId);
+      const currentOpenIds = sanitizeOpenPackageIds(prev, tourPackages, packageOpenMode);
+      const isCurrentlyOpen = currentOpenIds.includes(packageId);
+      if (isCurrentlyOpen) return currentOpenIds.filter((id) => id !== packageId);
       if (packageOpenMode === "single") return [packageId];
-      return [...prev, packageId];
+      return [...currentOpenIds, packageId];
     });
   };
 
@@ -1147,23 +1457,28 @@ function AdminPageContent() {
 
     const isoDate = new Date(`${availabilityDateInput}T09:00:00.000Z`).toISOString();
     const keyDate = isoDate.slice(0, 10);
+    const nextTimeSlots = previewSpecificSlots;
 
     const existing = availabilityList.find((item) => item.date.slice(0, 10) === keyDate);
     if (existing) {
       setAvailabilityList((prev) =>
-        prev.map((item) => (item.id === existing.id ? { ...item, maxPeople } : item)),
+        prev.map((item) => (item.id === existing.id ? { ...item, maxPeople, timeSlots: nextTimeSlots } : item)),
       );
       setAvailabilityDateInput("");
       setAvailabilityMaxPeopleInput(10);
+      setAvailabilityUseCustomTimesInput(false);
+      setAvailabilityCustomTimesInput("");
       return;
     }
 
     const nextId = availabilityList.length
       ? Math.max(...availabilityList.map((item) => item.id)) + 1
       : 1;
-    setAvailabilityList((prev) => [...prev, { id: nextId, date: isoDate, maxPeople }]);
+    setAvailabilityList((prev) => [...prev, { id: nextId, date: isoDate, maxPeople, timeSlots: nextTimeSlots }]);
     setAvailabilityDateInput("");
     setAvailabilityMaxPeopleInput(10);
+    setAvailabilityUseCustomTimesInput(false);
+    setAvailabilityCustomTimesInput("");
   };
 
   const handleRemoveAvailability = (itemId: number) => {
@@ -1187,17 +1502,20 @@ function AdminPageContent() {
 
   const handleToggleTourSelection = (tourId: number) => {
     setSelectedTourIds((prev) =>
-      prev.includes(tourId) ? prev.filter((id) => id !== tourId) : [...prev, tourId],
+      prev.includes(tourId)
+        ? prev.filter((id) => id !== tourId)
+        : [...prev.filter((id) => allTours.some((tour) => tour.id === id)), tourId],
     );
   };
 
   const handleToggleSelectPageTours = (checked: boolean) => {
     const currentIds = paginatedTours.map((tour) => tour.id);
     setSelectedTourIds((prev) => {
+      const baseSelection = prev.filter((id) => allTours.some((tour) => tour.id === id));
       if (checked) {
-        return Array.from(new Set([...prev, ...currentIds]));
+        return Array.from(new Set([...baseSelection, ...currentIds]));
       }
-      return prev.filter((id) => !currentIds.includes(id));
+      return baseSelection.filter((id) => !currentIds.includes(id));
     });
   };
 
@@ -1288,7 +1606,7 @@ function AdminPageContent() {
   };
 
   const handleExportToursCsv = (mode: "all" | "selected") => {
-    const toursToExport = mode === "all" ? allTours : allTours.filter((tour) => selectedTourIds.includes(tour.id));
+    const toursToExport = mode === "all" ? allTours : allTours.filter((tour) => effectiveSelectedTourIds.includes(tour.id));
 
     if (toursToExport.length === 0) {
       setFeedback({
@@ -1387,10 +1705,7 @@ function AdminPageContent() {
   };
 
   const handleCreateOrUpdateTour = async () => {
-    if (!imageList.length) {
-      setFeedback({ type: "error", message: "Sube al menos una imagen para el tour." });
-      return false;
-    }
+    const orderedImageList = orderImagesWithFeatured(imageList, featuredImageUrl);
 
     const category = categories.find((c) => c.id === categoryId);
     const payloadCategory = category ? { id: category.id, name: category.name } : { id: 0, name: "Sin categoria" };
@@ -1428,22 +1743,32 @@ function AdminPageContent() {
 
     const effectiveBasePrice = getPrimaryPriceFromPackages(preparedTourPackages, 0);
 
+    const normalizedAvailabilityList = sanitizeAvailabilityItems(availabilityList);
+    const availabilityConfig: AvailabilityConfig = {
+      mode: availabilityMode,
+      openSchedule: normalizeOpenScheduleConfig(openSchedule),
+      dateSchedules: buildDateSchedulesFromAvailability(normalizedAvailabilityList),
+    };
+
     const payload = {
       title,
+      slug: slugifyTourValue(slug || title),
       description,
       price: effectiveBasePrice,
       minPeople: Number.isFinite(Number(minPeople)) && Number(minPeople) > 0 ? Math.floor(Number(minPeople)) : 1,
-      images: imageList,
+      images: orderedImageList,
       category: payloadCategory,
       includedItems: parseMultilineList(includedText),
       recommendations: parseMultilineList(recommendationsText),
       faqs: sanitizeFaqs(faqsList),
-      availability: [...availabilityList].sort((a, b) => a.date.localeCompare(b.date)),
+      availability: normalizedAvailabilityList,
+      availabilityConfig,
       status,
       isDeleted: false,
       deletedAt: null,
       country: country || undefined,
       zone: zone || undefined,
+      departurePoint: departurePoint || undefined,
       durationDays: durationDays === "" ? undefined : Number(durationDays),
       activityType: activityType || undefined,
       difficulty: difficulty || undefined,
@@ -1465,14 +1790,16 @@ function AdminPageContent() {
           body: JSON.stringify({
             id: editingTourId,
             title,
+            slug: slugifyTourValue(slug || title),
             description,
             price: payload.price,
             minPeople: payload.minPeople,
-            images: imageList,
+            images: orderedImageList,
             categoryId,
             status,
             country: payload.country,
             zone: payload.zone,
+            departurePoint: payload.departurePoint,
             durationDays: payload.durationDays,
             activityType: payload.activityType,
             difficulty: payload.difficulty,
@@ -1487,7 +1814,8 @@ function AdminPageContent() {
             featured: payload.featured,
             isDeleted: payload.isDeleted,
             deletedAt: payload.deletedAt,
-            availability: [...availabilityList].sort((a, b) => a.date.localeCompare(b.date)),
+            availability: payload.availability,
+            availabilityConfig: payload.availabilityConfig,
           }),
         });
 
@@ -1505,29 +1833,33 @@ function AdminPageContent() {
           setFeedback({ type: "error", message: "No se pudo actualizar el tour en la base de datos." });
           return false;
         }
+
+        const savedTour = await res.json().catch(() => null);
+        updatedTours = updatedTours.map((tour) => (tour.id === editingTourId ? { ...tour, ...payload, ...(savedTour || {}) } : tour));
       } catch {
         setFeedback({ type: "error", message: "Error de conexion al actualizar el tour en la base de datos." });
         return false;
       }
-
-      updatedTours = updatedTours.map((tour) => (tour.id === editingTourId ? { ...tour, ...payload } : tour));
       setFeedback({ type: "success", message: "Tour actualizado correctamente." });
     } else {
       let createdId = nextId(updatedTours);
+      let createdTour: Partial<TourAdminView> | null = null;
       try {
         const res = await fetch("/api/admin/tour", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title,
+            slug: slugifyTourValue(slug || title),
             description,
             price: payload.price,
             minPeople: payload.minPeople,
-            images: imageList,
+            images: orderedImageList,
             categoryId,
             status,
             country: payload.country,
             zone: payload.zone,
+            departurePoint: payload.departurePoint,
             durationDays: payload.durationDays,
             activityType: payload.activityType,
             difficulty: payload.difficulty,
@@ -1542,7 +1874,8 @@ function AdminPageContent() {
             featured: payload.featured,
             isDeleted: payload.isDeleted,
             deletedAt: payload.deletedAt,
-            availability: [...availabilityList].sort((a, b) => a.date.localeCompare(b.date)),
+            availability: payload.availability,
+            availabilityConfig: payload.availabilityConfig,
           }),
         });
         if (res.status === 401) {
@@ -1554,6 +1887,7 @@ function AdminPageContent() {
         if (res.ok) {
           const created = await res.json();
           if (created?.id) createdId = created.id;
+          createdTour = created;
         } else {
           if (res.status === 413) {
             setFeedback({ type: "error", message: "Las imagenes del tour exceden el limite permitido. Reduce cantidad o tamano de imagenes." });
@@ -1567,7 +1901,7 @@ function AdminPageContent() {
         return false;
       }
 
-      updatedTours = [{ id: createdId, ...payload }, ...updatedTours];
+      updatedTours = [{ id: createdId, ...payload, ...(createdTour || {}) }, ...updatedTours];
       setFeedback({ type: "success", message: "Tour creado correctamente." });
     }
 
@@ -1592,12 +1926,15 @@ function AdminPageContent() {
 
     setEditingTourId(tour.id);
     setTitle(tour.title);
+    setSlug(tour.slug || slugifyTourValue(tour.title));
     setDescription(tour.description);
     setMinPeople(typeof tour.minPeople === "number" && tour.minPeople > 0 ? tour.minPeople : 1);
     setImageList(tour.images || []);
+    setFeaturedImageUrl(tour.images?.[0] ?? null);
     setCategoryId(tour.category?.id ?? null);
     setCountry(tour.country || "");
     setZone(tour.zone || "");
+    setDeparturePoint(tour.departurePoint || "");
     setDurationDays(typeof tour.durationDays === "number" ? tour.durationDays : "");
     setActivityType(tour.activityType || "");
     setDifficulty(tour.difficulty || "");
@@ -1610,22 +1947,33 @@ function AdminPageContent() {
     setIncludedText(formatMultilineList(tour.includedItems));
     setRecommendationsText(formatMultilineList(tour.recommendations));
     setFaqsList(sanitizeFaqs(tour.faqs));
-    setAvailabilityList(getEffectiveAvailability(tour));
+    const effectiveAvailability = getEffectiveAvailability(tour);
+    const effectiveAvailabilityConfig = getEffectiveAvailabilityConfig(tour, effectiveAvailability);
+    setAvailabilityList(applyDateSchedulesToAvailability(effectiveAvailability, effectiveAvailabilityConfig.dateSchedules));
+    setAvailabilityMode(effectiveAvailabilityConfig.mode);
+    setOpenSchedule(effectiveAvailabilityConfig.openSchedule);
     setFaqQuestionInput("");
     setFaqAnswerInput("");
     setAvailabilityDateInput("");
     setAvailabilityMaxPeopleInput(10);
+    setAvailabilityUseCustomTimesInput(false);
+    setAvailabilityCustomTimesInput("");
+    setAvailabilityStartTimeInput("08:00");
+    setAvailabilityEndTimeInput("17:00");
+    setAvailabilityIntervalInput(30);
     setStatus(tour.status ?? "BORRADOR");
     setFeatured(Boolean(tour.featured));
     const nextEditor: TourEditorState = {
       editingTourId: tour.id,
       title: tour.title,
+      slug: tour.slug || slugifyTourValue(tour.title),
       description: tour.description,
       minPeople: typeof tour.minPeople === "number" && tour.minPeople > 0 ? tour.minPeople : 1,
       imageList: tour.images || [],
       categoryId: tour.category?.id ?? null,
       country: tour.country || "",
       zone: tour.zone || "",
+      departurePoint: tour.departurePoint || "",
       durationDays: typeof tour.durationDays === "number" ? tour.durationDays : "",
       activityType: tour.activityType || "",
       difficulty: tour.difficulty || "",
@@ -1637,7 +1985,8 @@ function AdminPageContent() {
       includedText: formatMultilineList(tour.includedItems),
       recommendationsText: formatMultilineList(tour.recommendations),
       faqsList: sanitizeFaqs(tour.faqs),
-      availabilityList: getEffectiveAvailability(tour),
+      availabilityList: applyDateSchedulesToAvailability(effectiveAvailability, effectiveAvailabilityConfig.dateSchedules),
+      availabilityConfig: effectiveAvailabilityConfig,
       status: tour.status ?? "BORRADOR",
       featured: Boolean(tour.featured),
     };
@@ -1963,32 +2312,26 @@ function AdminPageContent() {
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(tabTours.length / itemsPerPage)), [tabTours.length, itemsPerPage]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab, searchTour, itemsPerPage]);
+  const requestedPage = pagination.scope === paginationScope ? pagination.page : 1;
+  const currentPage = Math.min(Math.max(1, requestedPage), totalPages);
 
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
-
-  const paginatedTours = useMemo(() => {
+  const paginatedTours = (() => {
     const start = (currentPage - 1) * itemsPerPage;
     return tabTours.slice(start, start + itemsPerPage);
-  }, [tabTours, currentPage, itemsPerPage]);
+  })();
 
   const isCurrentPageFullySelected = useMemo(() => {
     if (paginatedTours.length === 0) return false;
-    return paginatedTours.every((tour) => selectedTourIds.includes(tour.id));
-  }, [paginatedTours, selectedTourIds]);
+    return paginatedTours.every((tour) => effectiveSelectedTourIds.includes(tour.id));
+  }, [effectiveSelectedTourIds, paginatedTours]);
 
-  useEffect(() => {
+  const syncEditorRoute = useEffectEvent(() => {
     if (!isEditorRoute || isAuthChecking || !isAuthenticated) return;
 
     const idParam = searchParams?.get("id") ?? null;
     if (idParam) {
       const targetId = Number(idParam);
       if (!Number.isFinite(targetId)) {
-        setFeedback({ type: "error", message: "El tour a editar no es valido." });
         router.push("/admin");
         return;
       }
@@ -2002,7 +2345,6 @@ function AdminPageContent() {
       }
 
       if (allTours.length > 0) {
-        setFeedback({ type: "error", message: "No se encontro el tour solicitado para editar." });
         router.push("/admin");
       }
       return;
@@ -2011,6 +2353,10 @@ function AdminPageContent() {
     if (!isEditorOpen || editingTourId !== null) {
       openCreateTour();
     }
+  });
+
+  useEffect(() => {
+    syncEditorRoute();
   }, [isEditorRoute, isAuthChecking, isAuthenticated, searchParams, allTours, isEditorOpen, editingTourId, categories]);
 
   if (isAuthChecking) {
@@ -2075,18 +2421,34 @@ function AdminPageContent() {
 
       {!isEditorRoute && (
       <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-3">
           <div>
             <h2 className="text-xl font-extrabold text-slate-900">Gestion de tours</h2>
             <p className="mt-1 text-sm text-slate-600">Lista compacta para administrar tus tours rapidamente.</p>
           </div>
-          <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row">
-            <input
-              value={searchTour}
-              onChange={(e) => setSearchTour(e.target.value)}
-              placeholder="Buscar por nombre, pais o actividad"
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 md:w-80"
-            />
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <input
+                value={searchTour}
+                onChange={(e) => setSearchTour(e.target.value)}
+                placeholder="Buscar por nombre, pais o actividad"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm sm:max-w-xl"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => router.push("/admin/media")}
+                  className="whitespace-nowrap rounded-lg border border-cyan-300 bg-white px-3 py-2 text-xs font-semibold text-cyan-700 hover:bg-cyan-50 md:text-sm"
+                >
+                  Biblioteca de medios
+                </button>
+                <button type="button" onClick={() => openEditorRoute()} className="whitespace-nowrap rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-600 md:text-sm">
+                  Nuevo tour
+                </button>
+              </div>
+            </div>
+
             <input
               ref={importToursCsvRef}
               type="file"
@@ -2094,32 +2456,32 @@ function AdminPageContent() {
               className="hidden"
               onChange={(e) => handleImportToursCsv(e.target.files)}
             />
-            <button type="button" onClick={() => importToursCsvRef.current?.click()} className="rounded-xl border border-violet-300 px-4 py-2 text-sm font-bold text-violet-700 hover:bg-violet-50">
-              Importar CSV
-            </button>
-            <button type="button" onClick={() => handleExportToursCsv("all")} className="rounded-xl border border-emerald-300 px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-50">
-              Exportar todos CSV
-            </button>
-            <button type="button" onClick={() => handleExportToursCsv("selected")} className="rounded-xl border border-teal-300 px-4 py-2 text-sm font-bold text-teal-700 hover:bg-teal-50">
-              Exportar seleccionados CSV ({selectedTourIds.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedTourIds([])}
-              disabled={selectedTourIds.length === 0}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Limpiar seleccion
-            </button>
-            <button type="button" onClick={() => setIsFilterConfigOpen(true)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-              Filtros visibles
-            </button>
-            <button type="button" onClick={() => setIsCategoryManagerOpen(true)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-              Categorias
-            </button>
-            <button type="button" onClick={() => openEditorRoute()} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-600">
-              Nuevo tour
-            </button>
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => importToursCsvRef.current?.click()} className="whitespace-nowrap rounded-lg border border-violet-300 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-50 md:text-sm">
+                Importar CSV
+              </button>
+              <button type="button" onClick={() => handleExportToursCsv("all")} className="whitespace-nowrap rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 md:text-sm">
+                Exportar todos CSV
+              </button>
+              <button type="button" onClick={() => handleExportToursCsv("selected")} className="whitespace-nowrap rounded-lg border border-teal-300 px-3 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-50 md:text-sm">
+                Exportar seleccionados ({effectiveSelectedTourIds.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTourIds([])}
+                disabled={effectiveSelectedTourIds.length === 0}
+                className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              >
+                Limpiar seleccion
+              </button>
+              <button type="button" onClick={() => setIsFilterConfigOpen(true)} className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 md:text-sm">
+                Filtros visibles
+              </button>
+              <button type="button" onClick={() => setIsCategoryManagerOpen(true)} className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 md:text-sm">
+                Categorias
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2201,14 +2563,20 @@ function AdminPageContent() {
                   <td className="px-3 py-3 align-top">
                     <input
                       type="checkbox"
-                      checked={selectedTourIds.includes(tour.id)}
+                      checked={effectiveSelectedTourIds.includes(tour.id)}
                       onChange={() => handleToggleTourSelection(tour.id)}
                       aria-label={`Seleccionar tour ${tour.title}`}
                     />
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-3">
-                      <img src={tour.images?.[0]} alt={tour.title} className="h-12 w-16 rounded-md object-cover" />
+                      {tour.images?.[0] ? (
+                        <img src={tour.images[0]} alt={tour.title} className="h-14 w-14 rounded-md object-cover" />
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-md border border-slate-200 bg-slate-100 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                          Sin foto
+                        </div>
+                      )}
                       <div>
                         <p className="font-bold text-slate-900">{tour.title}</p>
                         <p className="line-clamp-2 whitespace-pre-line text-xs text-slate-500">{tour.description}</p>
@@ -2331,6 +2699,23 @@ function AdminPageContent() {
                     <input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="Titulo" value={title} onChange={(e) => setTitle(e.target.value)} required />
                   </label>
                   <label className="block text-sm font-bold text-slate-700">
+                    Link del tour
+                    <div className="mt-1 flex items-center overflow-hidden rounded-xl border border-slate-300 bg-white">
+                      <span className="border-r border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-500">/tours/</span>
+                      <input
+                        className="w-full px-3 py-2"
+                        placeholder="titulo-del-tour"
+                        value={slug}
+                        onChange={(e) => setSlug(slugifyTourValue(e.target.value))}
+                      />
+                    </div>
+                    <span className="mt-1 block text-xs font-semibold text-slate-500">
+                      {status === "BORRADOR"
+                        ? "En borrador se actualiza automaticamente al cambiar el titulo. Tambien puedes editarlo manualmente."
+                        : "Cuando el tour esta activo o no activo, este link solo cambia de forma manual."}
+                    </span>
+                  </label>
+                  <label className="block text-sm font-bold text-slate-700">
                     Descripcion
                     <textarea className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="Descripcion" rows={4} value={description} onChange={(e) => setDescription(e.target.value)} required />
                   </label>
@@ -2386,30 +2771,35 @@ function AdminPageContent() {
                     </div>
                   </div>
 
-                  <div className="space-y-3 px-4 pb-4">
+                  <div className="space-y-5 px-4 pb-4">
                     {tourPackages.map((pkg, pkgIndex) => {
-                      const isExpanded = openPackageIds.includes(pkg.id);
+                      const isExpanded = effectiveOpenPackageIds.includes(pkg.id);
 
                       return (
-                        <div key={pkg.id} className="rounded-xl bg-slate-50/70">
+                        <div key={pkg.id} className="overflow-hidden rounded-2xl border-2 border-emerald-200/70 bg-white shadow-sm shadow-emerald-100/50">
                           <button
                             type="button"
                             onClick={() => togglePackageExpanded(pkg.id)}
-                            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                            className="flex w-full items-center justify-between gap-3 border-b border-emerald-100 bg-gradient-to-r from-emerald-50/90 to-white px-4 py-3.5 text-left"
                           >
                             <div>
-                              <p className="text-sm font-extrabold text-slate-900">{pkg.title.trim() || `Paquete ${pkgIndex + 1}`}</p>
+                              <span className="inline-flex rounded-full bg-emerald-700 px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-white">
+                                Paquete {pkgIndex + 1}
+                              </span>
+                              <p className="mt-1 text-base font-black text-slate-900">{pkg.title.trim() || `Paquete ${pkgIndex + 1}`}</p>
                               {!isExpanded && pkg.description.trim() && (
                                 <p className="mt-0.5 text-sm text-slate-500">{pkg.description}</p>
                               )}
                             </div>
-                            <span className="text-xs font-semibold text-emerald-700">{isExpanded ? "Ocultar" : "Mostrar"}</span>
+                            <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-emerald-700">
+                              {isExpanded ? "Ocultar" : "Mostrar"}
+                            </span>
                           </button>
 
                           {isExpanded && (
                             <div className="space-y-3 px-4 py-4">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-bold text-slate-800">Configuracion del paquete</p>
+                              <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200/70">
+                                <p className="text-sm font-extrabold text-slate-800">Configuracion del paquete</p>
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveTourPackage(pkg.id)}
@@ -2521,19 +2911,80 @@ function AdminPageContent() {
                 <summary className="cursor-pointer bg-slate-50 px-4 py-3 text-sm font-bold uppercase tracking-wide text-slate-700">Galeria</summary>
                 <div className="mt-3 px-4 pb-4">
                   <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Imagenes del tour</p>
-                  <input type="file" accept="image/*" multiple className="mt-2 w-full text-sm" onChange={(e) => handleUploadImages(e.target.files)} />
+                  <p className="mt-1 text-xs text-slate-600">Arrastra imagenes aqui o usa el boton para seleccionarlas desde tu computadora.</p>
+
+                  <input
+                    ref={galleryInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      void handleUploadImages(e.target.files);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={openGalleryPicker}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openGalleryPicker();
+                      }
+                    }}
+                    onDragOver={handleGalleryDragOver}
+                    onDragLeave={handleGalleryDragLeave}
+                    onDrop={handleGalleryDrop}
+                    className={`mt-2 rounded-xl border-2 border-dashed px-4 py-6 text-center transition ${isGalleryDragActive ? "border-emerald-400 bg-emerald-50" : "border-slate-300 bg-slate-50/70 hover:border-emerald-300"}`}
+                  >
+                    <p className="text-sm font-semibold text-slate-700">Haz clic aqui para seleccionar imagenes</p>
+                    <p className="mt-1 text-xs text-slate-500">Tambien puedes arrastrarlas y soltarlas en esta zona.</p>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={openGalleryPicker} className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+                      Seleccionar imagenes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearAllImages}
+                      disabled={imageList.length === 0}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Dejar sin imagenes
+                    </button>
+                    <span className="text-xs text-slate-500">{imageList.length} imagen(es) cargada(s)</span>
+                  </div>
 
                   {imageList.length > 0 && (
                     <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
                       {imageList.map((image, index) => (
                         <div key={`${image.slice(0, 20)}-${index}`} className="relative overflow-hidden rounded-lg bg-white ring-1 ring-slate-200/70">
-                          <img src={image} alt={`preview-${index}`} className="h-24 w-full object-cover" />
+                          <img src={image} alt={`preview-${index}`} className="aspect-square w-full object-cover" />
+                          <div className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
+                            <input
+                              type="radio"
+                              name="featured-image"
+                              checked={featuredImageUrl === image}
+                              onChange={() => setFeaturedImageUrl(image)}
+                            />
+                            Destacada
+                          </div>
                           <button type="button" onClick={() => removeImage(index)} className="absolute right-1 top-1 rounded bg-white/90 px-1 text-xs font-bold text-rose-600">
                             x
                           </button>
                         </div>
                       ))}
                     </div>
+                  )}
+
+                  {imageList.length === 0 && (
+                    <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                      Este tour se guardara sin imagenes. Puedes agregar una despues si lo deseas.
+                    </p>
                   )}
                 </div>
               </details>
@@ -2672,7 +3123,112 @@ function AdminPageContent() {
                 <summary className="cursor-pointer bg-slate-50 px-4 py-3 text-sm font-bold text-slate-800">Fechas disponibles</summary>
                 <div className="mt-3 px-4 pb-4">
                 <p className="text-sm font-bold text-slate-700">Fechas disponibles</p>
-                <p className="text-xs text-slate-500">Agrega fechas del calendario con cupo maximo por fecha.</p>
+                <p className="text-xs text-slate-500">Puedes activar modo abierto para permitir cualquier dia o definir fechas especificas con horarios opcionales.</p>
+
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setAvailabilityMode("SPECIFIC")}
+                    className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+                      availabilityMode === "SPECIFIC"
+                        ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    Dias especificos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAvailabilityMode("OPEN")}
+                    className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+                      availabilityMode === "OPEN"
+                        ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    Abierto (todos los dias)
+                  </button>
+                </div>
+
+                {availabilityMode === "OPEN" && (
+                  <div className="mt-3 rounded-xl bg-emerald-50/70 p-3 ring-1 ring-emerald-200/70">
+                    <p className="text-sm font-bold text-emerald-900">Horario del modo abierto</p>
+
+                    <div className="mt-2 grid gap-2 md:grid-cols-4">
+                      <label className="block text-xs font-bold text-slate-700">
+                        Cupo por dia
+                        <input
+                          type="number"
+                          min={1}
+                          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                          value={openSchedule.maxPeople}
+                          onChange={(e) =>
+                            setOpenSchedule((prev) => ({
+                              ...prev,
+                              maxPeople: e.target.value === "" ? 1 : Math.max(1, Number(e.target.value) || 1),
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="block text-xs font-bold text-slate-700">
+                        Desde
+                        <input
+                          type="time"
+                          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                          value={openSchedule.startTime}
+                          onChange={(e) => setOpenSchedule((prev) => ({ ...prev, startTime: e.target.value }))}
+                        />
+                      </label>
+                      <label className="block text-xs font-bold text-slate-700">
+                        Hasta
+                        <input
+                          type="time"
+                          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                          value={openSchedule.endTime}
+                          onChange={(e) => setOpenSchedule((prev) => ({ ...prev, endTime: e.target.value }))}
+                        />
+                      </label>
+                      <label className="block text-xs font-bold text-slate-700">
+                        Cada (min)
+                        <select
+                          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                          value={openSchedule.intervalMinutes}
+                          onChange={(e) => setOpenSchedule((prev) => ({ ...prev, intervalMinutes: Number(e.target.value) || 30 }))}
+                        >
+                          <option value={15}>15</option>
+                          <option value={30}>30</option>
+                          <option value={45}>45</option>
+                          <option value={60}>60</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={openSchedule.useCustomTimes}
+                        onChange={(e) => setOpenSchedule((prev) => ({ ...prev, useCustomTimes: e.target.checked }))}
+                      />
+                      Definir horarios manualmente
+                    </label>
+
+                    {openSchedule.useCustomTimes && (
+                      <label className="mt-2 block text-xs font-bold text-slate-700">
+                        Horarios manuales (HH:mm, separados por coma)
+                        <input
+                          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                          placeholder="08:00, 08:30, 09:00"
+                          value={openSchedule.customTimesText}
+                          onChange={(e) => setOpenSchedule((prev) => ({ ...prev, customTimesText: e.target.value }))}
+                        />
+                      </label>
+                    )}
+
+                    <p className="mt-2 text-xs text-slate-600">
+                      Horarios activos: {previewOpenSlots.length ? previewOpenSlots.map((slot) => formatTimeLabel(slot)).join(", ") : "Sin horarios"}
+                    </p>
+                  </div>
+                )}
 
                 <div className="mt-2 grid gap-2 md:grid-cols-[1fr_160px_auto]">
                   <label className="block text-sm font-bold text-slate-700">
@@ -2700,15 +3256,84 @@ function AdminPageContent() {
                   </button>
                 </div>
 
+                <div className="mt-2 rounded-xl bg-slate-50/80 p-3 ring-1 ring-slate-200/70">
+                  <p className="text-xs font-bold text-slate-700">Horarios para la fecha especifica (opcional)</p>
+                  <p className="text-xs text-slate-500">Si no defines horarios, esa fecha quedara sin horario fijo.</p>
+
+                  <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={availabilityUseCustomTimesInput}
+                      onChange={(e) => setAvailabilityUseCustomTimesInput(e.target.checked)}
+                    />
+                    Ingresar horarios manualmente
+                  </label>
+
+                  {availabilityUseCustomTimesInput ? (
+                    <label className="mt-2 block text-xs font-bold text-slate-700">
+                      Horarios manuales (HH:mm)
+                      <input
+                        className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                        placeholder="08:00, 08:45, 10:10"
+                        value={availabilityCustomTimesInput}
+                        onChange={(e) => setAvailabilityCustomTimesInput(e.target.value)}
+                      />
+                    </label>
+                  ) : (
+                    <div className="mt-2 grid gap-2 md:grid-cols-3">
+                      <label className="block text-xs font-bold text-slate-700">
+                        Desde
+                        <input
+                          type="time"
+                          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                          value={availabilityStartTimeInput}
+                          onChange={(e) => setAvailabilityStartTimeInput(e.target.value)}
+                        />
+                      </label>
+                      <label className="block text-xs font-bold text-slate-700">
+                        Hasta
+                        <input
+                          type="time"
+                          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                          value={availabilityEndTimeInput}
+                          onChange={(e) => setAvailabilityEndTimeInput(e.target.value)}
+                        />
+                      </label>
+                      <label className="block text-xs font-bold text-slate-700">
+                        Cada (min)
+                        <select
+                          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                          value={availabilityIntervalInput}
+                          onChange={(e) => setAvailabilityIntervalInput(e.target.value === "" ? "" : Number(e.target.value))}
+                        >
+                          <option value={15}>15</option>
+                          <option value={30}>30</option>
+                          <option value={45}>45</option>
+                          <option value={60}>60</option>
+                        </select>
+                      </label>
+                    </div>
+                  )}
+
+                  <p className="mt-2 text-xs text-slate-600">
+                    Vista previa: {previewSpecificSlots.length ? previewSpecificSlots.map((slot) => formatTimeLabel(slot)).join(", ") : "Sin horarios"}
+                  </p>
+                </div>
+
                 <div className="mt-2 space-y-2">
                   {availabilityList
                     .slice()
                     .sort((a, b) => a.date.localeCompare(b.date))
                     .map((item) => (
                       <div key={`${item.id}-${item.date}`} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 ring-1 ring-slate-200/70">
-                        <p className="text-sm text-slate-700">
-                          {new Date(item.date).toLocaleDateString("es-ES")} | Cupo: {item.maxPeople}
-                        </p>
+                        <div>
+                          <p className="text-sm text-slate-700">
+                            {new Date(item.date).toLocaleDateString("es-ES")} | Cupo: {item.maxPeople}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Horarios: {normalizeTimeSlots(item.timeSlots).length ? normalizeTimeSlots(item.timeSlots).map((slot) => formatTimeLabel(slot)).join(", ") : "Sin horario fijo"}
+                          </p>
+                        </div>
                         <button type="button" onClick={() => handleRemoveAvailability(item.id)} className="rounded-lg border border-rose-300 px-2 py-1 text-xs font-bold text-rose-600">
                           Quitar
                         </button>
@@ -2823,6 +3448,15 @@ function AdminPageContent() {
                   />
                 </label>
                 <label className="block text-sm font-bold text-slate-700">
+                  Punto de salida
+                  <input
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2"
+                    placeholder="Punto de salida exacto o punto de encuentro"
+                    value={departurePoint}
+                    onChange={(e) => setDeparturePoint(e.target.value)}
+                  />
+                </label>
+                <label className="block text-sm font-bold text-slate-700">
                   Tipo de actividad
                   <input className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="Tipo de actividad" value={activityType} onChange={(e) => setActivityType(e.target.value)} />
                 </label>
@@ -2864,7 +3498,7 @@ function AdminPageContent() {
             <div className="grid gap-2 text-sm text-slate-700">
               {Object.entries(filterConfig).map(([key, value]) => (
                 <label key={key} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-                  <span>{key}</span>
+                  <span>{filterConfigLabels[key as keyof FilterConfig]}</span>
                   <input type="checkbox" checked={value} onChange={(e) => setFilterConfig((prev) => ({ ...prev, [key]: e.target.checked }))} />
                 </label>
               ))}

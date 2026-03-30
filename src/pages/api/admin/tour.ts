@@ -13,9 +13,44 @@ export const config = {
 const validStatuses = ['ACTIVO', 'NO_ACTIVO', 'BORRADOR'] as const;
 type ValidStatus = (typeof validStatuses)[number];
 
+type SlugDatabase = {
+  tour: {
+    findFirst: (args: { where: { slug: string; id?: { not: number } } }) => Promise<{ id: number } | null>;
+  };
+};
+
 function toValidStatus(value: unknown): ValidStatus | null {
   if (typeof value !== 'string') return null;
   return validStatuses.includes(value as ValidStatus) ? (value as ValidStatus) : null;
+}
+
+function slugifyTourValue(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+async function buildUniqueTourSlug(db: SlugDatabase, value: unknown, excludeId?: number): Promise<string> {
+  const baseSlug = slugifyTourValue(value) || 'tour';
+  let suffix = 2;
+  let candidate = baseSlug;
+
+  while (
+    await db.tour.findFirst({
+      where: {
+        slug: candidate,
+        ...(Number.isFinite(excludeId) ? { id: { not: excludeId as number } } : {}),
+      },
+    })
+  ) {
+    candidate = `${baseSlug}-${suffix++}`;
+  }
+
+  return candidate;
 }
 
 function getTourId(req: NextApiRequest): number {
@@ -57,6 +92,75 @@ type NormalizedTourPackage = {
   description: string;
   priceOptions: NormalizedPriceOption[];
 };
+
+type NormalizedAvailabilityConfig = {
+  mode: 'SPECIFIC' | 'OPEN';
+  openSchedule: {
+    maxPeople: number;
+    startTime: string;
+    endTime: string;
+    intervalMinutes: number;
+    useCustomTimes: boolean;
+    customTimesText: string;
+  };
+  dateSchedules: Record<string, string[]>;
+};
+
+function normalizeTime24(value: unknown): string | null {
+  const trimmed = String(value ?? '').trim();
+  const match = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function normalizeTimeSlots(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+
+  return Array.from(
+    new Set(
+      items
+        .map((item) => normalizeTime24(item))
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).sort();
+}
+
+function normalizeAvailabilityConfigInput(input: unknown): NormalizedAvailabilityConfig {
+  const source = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+  const openRaw = source.openSchedule && typeof source.openSchedule === 'object'
+    ? (source.openSchedule as Record<string, unknown>)
+    : {};
+  const dateSchedulesRaw = source.dateSchedules && typeof source.dateSchedules === 'object' && !Array.isArray(source.dateSchedules)
+    ? (source.dateSchedules as Record<string, unknown>)
+    : {};
+
+  const dateSchedules: Record<string, string[]> = {};
+  Object.entries(dateSchedulesRaw).forEach(([key, value]) => {
+    dateSchedules[key] = normalizeTimeSlots(value);
+  });
+
+  const openMaxPeople = Number(openRaw.maxPeople);
+  const openInterval = Number(openRaw.intervalMinutes);
+
+  return {
+    mode: source.mode === 'OPEN' ? 'OPEN' : 'SPECIFIC',
+    openSchedule: {
+      maxPeople: Number.isFinite(openMaxPeople) && openMaxPeople > 0 ? Math.floor(openMaxPeople) : 10,
+      startTime: normalizeTime24(openRaw.startTime) ?? '08:00',
+      endTime: normalizeTime24(openRaw.endTime) ?? '17:00',
+      intervalMinutes: Number.isFinite(openInterval) && openInterval > 0 ? Math.floor(openInterval) : 30,
+      useCustomTimes: Boolean(openRaw.useCustomTimes),
+      customTimesText: String(openRaw.customTimesText ?? ''),
+    },
+    dateSchedules,
+  };
+}
 
 function normalizePriceOptionsInput(items: unknown): NormalizedPriceOption[] {
   if (!Array.isArray(items)) return [];
@@ -162,6 +266,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const country = typeof req.body?.country === 'string' && req.body.country.trim() ? req.body.country.trim() : null;
   const zone = typeof req.body?.zone === 'string' && req.body.zone.trim() ? req.body.zone.trim() : null;
+  const departurePoint = typeof req.body?.departurePoint === 'string' && req.body.departurePoint.trim() ? req.body.departurePoint.trim() : null;
   const durationDays = Number.isFinite(Number(req.body?.durationDays)) ? Number(req.body.durationDays) : null;
   const durationHours = Number.isFinite(Number(req.body?.durationHours)) ? Number(req.body.durationHours) : null;
   const activityType = typeof req.body?.activityType === 'string' && req.body.activityType.trim() ? req.body.activityType.trim() : null;
@@ -211,9 +316,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const parsedFallbackPrice = Number(price);
   const fallbackPrice = Number.isFinite(parsedFallbackPrice) && parsedFallbackPrice >= 0 ? parsedFallbackPrice : 0;
   const effectiveTourPrice = getPrimaryTourPriceFromPackages(tourPackages, fallbackPrice);
+  const requestedSlug = typeof req.body?.slug === 'string' ? req.body.slug.trim() : '';
   const featured = Boolean(req.body?.featured);
   const isDeleted = Boolean(req.body?.isDeleted);
   const deletedAt = typeof req.body?.deletedAt === 'string' && req.body.deletedAt ? new Date(req.body.deletedAt) : null;
+  const availabilityConfig = normalizeAvailabilityConfigInput(req.body?.availabilityConfig);
+
+  const availabilityDateSchedulesFromList: Record<string, string[]> = Array.isArray(availability)
+    ? availability.reduce((acc: Record<string, string[]>, item: { date?: string; timeSlots?: string[] }) => {
+        const dateKey = String(item?.date ?? '').slice(0, 10);
+        if (!dateKey) return acc;
+        acc[dateKey] = normalizeTimeSlots(item?.timeSlots);
+        return acc;
+      }, {})
+    : {};
+
+  const mergedAvailabilityConfig: NormalizedAvailabilityConfig = {
+    ...availabilityConfig,
+    dateSchedules: {
+      ...availabilityConfig.dateSchedules,
+      ...availabilityDateSchedulesFromList,
+    },
+  };
 
   const availabilityCreateData = Array.isArray(availability)
     ? availability
@@ -231,10 +355,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     if (req.method === 'POST') {
       const nextCategoryId = await resolveCategoryId(prisma, parsedCategoryId);
+      const nextSlug = await buildUniqueTourSlug(prisma, requestedSlug || title);
 
       const tour = await prisma.tour.create({
         data: {
           title,
+          slug: nextSlug,
           description,
           price: effectiveTourPrice,
           minPeople,
@@ -243,6 +369,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           status: status || 'BORRADOR',
           country: country ?? undefined,
           zone: zone ?? undefined,
+          departurePoint: departurePoint ?? undefined,
           durationDays: durationDays ?? undefined,
           durationHours: durationHours ?? undefined,
           activityType: activityType ?? undefined,
@@ -260,6 +387,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           featured,
           isDeleted,
           deletedAt: deletedAt ?? undefined,
+          availabilityConfig: mergedAvailabilityConfig,
           availability: availabilityCreateData
             ? {
                 create: availabilityCreateData,
@@ -312,18 +440,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const tour = await prisma.$transaction(async (tx) => {
+      const existingTour = await tx.tour.findUnique({
+        where: { id },
+        select: { id: true, slug: true, status: true },
+      });
+
+      if (!existingTour) {
+        throw new Error(`Tour ${id} no encontrado`);
+      }
+
       const nextCategoryId = await resolveCategoryId(tx, parsedCategoryId);
+      const effectiveStatus = toValidStatus(status) ?? existingTour.status;
+      const nextSlug = requestedSlug
+        ? await buildUniqueTourSlug(tx, requestedSlug, id)
+        : effectiveStatus === 'BORRADOR'
+          ? await buildUniqueTourSlug(tx, title || existingTour.slug || `tour-${id}`, id)
+          : existingTour.slug;
 
       const updateData: Record<string, unknown> = {
         title,
+        slug: nextSlug,
         description,
         price: effectiveTourPrice,
         minPeople,
         images,
         category: { connect: { id: nextCategoryId } },
-        status: status || 'BORRADOR',
+        status: effectiveStatus,
         country,
         zone,
+        departurePoint,
         durationDays,
         durationHours,
         activityType,
@@ -341,6 +486,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         featured,
         isDeleted,
         deletedAt,
+        availabilityConfig: mergedAvailabilityConfig,
       };
 
       let updatedTour;
@@ -353,7 +499,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const unsupportedFields: string[] = [];
         if (isUnknownArgumentError(error, 'minPeople')) unsupportedFields.push('minPeople');
         if (isUnknownArgumentError(error, 'zone')) unsupportedFields.push('zone');
+        if (isUnknownArgumentError(error, 'departurePoint')) unsupportedFields.push('departurePoint');
         if (isUnknownArgumentError(error, 'tourPackages')) unsupportedFields.push('tourPackages');
+        if (isUnknownArgumentError(error, 'availabilityConfig')) unsupportedFields.push('availabilityConfig');
 
         if (!unsupportedFields.length) throw error;
 
@@ -397,6 +545,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (isUnknownArgumentError(error, 'tourPackages')) {
       return res.status(500).json({
         error: 'El servidor no reconoce tourPackages. Reinicia el servidor y sincroniza Prisma.',
+      });
+    }
+
+    if (isUnknownArgumentError(error, 'availabilityConfig')) {
+      return res.status(500).json({
+        error: 'El servidor no reconoce availabilityConfig. Reinicia el servidor y sincroniza Prisma.',
       });
     }
 

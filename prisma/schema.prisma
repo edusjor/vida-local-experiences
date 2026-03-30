@@ -21,6 +21,7 @@ model Category {
 model Tour {
   id          Int      @id @default(autoincrement())
   title       String
+  slug        String   @unique
   description String
   price       Float
   minPeople   Int      @default(1)
@@ -28,6 +29,7 @@ model Tour {
   status      TourStatus @default(ACTIVO)
   country     String?
   zone        String?
+  departurePoint String?
   durationDays Int?
   durationHours Int?
   activityType String?
@@ -43,6 +45,7 @@ model Tour {
   faqs        Json?
   priceOptions Json?
   tourPackages Json?
+  availabilityConfig Json?
   featured    Boolean @default(false)
   isDeleted   Boolean @default(false)
   deletedAt   DateTime?

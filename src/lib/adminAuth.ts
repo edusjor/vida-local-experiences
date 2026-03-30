@@ -4,6 +4,12 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 const ADMIN_COOKIE_NAME = 'admin_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
+interface AdminAuthConfig {
+  sessionSecret: string;
+  username: string;
+  password: string;
+}
+
 function base64UrlEncode(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64url');
 }
@@ -12,12 +18,36 @@ function base64UrlDecode(value: string): string {
   return Buffer.from(value, 'base64url').toString('utf8');
 }
 
-function getSessionSecret(): string {
-  return process.env.ADMIN_SESSION_SECRET || 'dev-admin-session-secret-change-me';
+function readRequiredEnv(name: 'ADMIN_SESSION_SECRET' | 'ADMIN_USERNAME' | 'ADMIN_PASSWORD'): string | null {
+  const value = process.env[name];
+  if (typeof value !== 'string') return null;
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export function getAdminAuthConfig(): AdminAuthConfig | null {
+  const sessionSecret = readRequiredEnv('ADMIN_SESSION_SECRET');
+  const username = readRequiredEnv('ADMIN_USERNAME');
+  const password = readRequiredEnv('ADMIN_PASSWORD');
+
+  if (!sessionSecret || !username || !password) return null;
+  return { sessionSecret, username, password };
+}
+
+export function getAdminAuthMissingEnv(): string[] {
+  return ['ADMIN_SESSION_SECRET', 'ADMIN_USERNAME', 'ADMIN_PASSWORD'].filter(
+    (name) => !readRequiredEnv(name as 'ADMIN_SESSION_SECRET' | 'ADMIN_USERNAME' | 'ADMIN_PASSWORD'),
+  );
 }
 
 function signPayload(encodedPayload: string): string {
-  return crypto.createHmac('sha256', getSessionSecret()).update(encodedPayload).digest('base64url');
+  const config = getAdminAuthConfig();
+  if (!config) {
+    throw new Error('Admin auth config is incomplete');
+  }
+
+  return crypto.createHmac('sha256', config.sessionSecret).update(encodedPayload).digest('base64url');
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -48,6 +78,8 @@ export function createAdminSessionToken(username: string): string {
 }
 
 export function verifyAdminSessionToken(token: string): { ok: boolean; username?: string } {
+  if (!getAdminAuthConfig()) return { ok: false };
+
   const [encodedPayload, signature] = token.split('.');
   if (!encodedPayload || !signature) return { ok: false };
 
@@ -64,10 +96,13 @@ export function verifyAdminSessionToken(token: string): { ok: boolean; username?
   }
 }
 
-export function getAdminCredentials(): { username: string; password: string } {
+export function getAdminCredentials(): { username: string; password: string } | null {
+  const config = getAdminAuthConfig();
+  if (!config) return null;
+
   return {
-    username: process.env.ADMIN_USERNAME || 'admin',
-    password: process.env.ADMIN_PASSWORD || 'admin123',
+    username: config.username,
+    password: config.password,
   };
 }
 
@@ -95,6 +130,11 @@ export function getAdminSessionFromRequest(req: NextApiRequest): { ok: boolean; 
 }
 
 export function requireAdminSession(req: NextApiRequest, res: NextApiResponse): boolean {
+  if (!getAdminAuthConfig()) {
+    res.status(503).json({ error: 'Configuracion admin incompleta' });
+    return false;
+  }
+
   const session = getAdminSessionFromRequest(req);
   if (session.ok) return true;
   res.status(401).json({ error: 'No autorizado' });

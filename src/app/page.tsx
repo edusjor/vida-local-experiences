@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 function IconWrap({ children }: { children: React.ReactNode }) {
   return <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">{children}</span>;
 }
@@ -80,18 +82,18 @@ export default function Home() {
             Experiencias unicas y autenticas dentro y fuera del pais para todos los estilos de vida.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <a
+            <Link
               href="/tours"
               className="rounded-lg bg-emerald-600 px-8 py-3 text-center text-lg font-extrabold shadow-xl shadow-emerald-950/25 transition hover:bg-emerald-500"
             >
               Ver tours
-            </a>
-            <a
+            </Link>
+            <Link
               href="/contacto"
               className="rounded-lg bg-amber-400 px-8 py-3 text-center text-lg font-extrabold text-slate-900 shadow-xl shadow-amber-950/25 transition hover:bg-amber-300"
             >
               Explorar planes
-            </a>
+            </Link>
           </div>
         </div>
       </section>
@@ -169,12 +171,12 @@ export default function Home() {
                     <ClockIcon />
                     Medio dia
                   </p>
-                  <a
+                  <Link
                     href="/tours"
                     className="mt-4 inline-block rounded-lg bg-amber-400 px-5 py-2 text-sm font-extrabold text-slate-900 transition hover:bg-amber-300"
                   >
                     Ver tour
-                  </a>
+                  </Link>
                 </div>
               </article>
             ))}
@@ -223,12 +225,12 @@ export default function Home() {
               <p className="mt-3 text-emerald-50">
                 Te orientamos segun tu presupuesto, tipo de experiencia y tiempo disponible para que reserves con confianza.
               </p>
-              <a
+              <Link
                 href="/contacto"
                 className="mt-5 inline-block rounded-lg bg-amber-400 px-5 py-2 text-sm font-extrabold text-slate-900 transition hover:bg-amber-300"
               >
                 Ir al centro de contacto
-              </a>
+              </Link>
             </article>
           </div>
         </div>
@@ -270,7 +272,7 @@ export default function Home() {
                 <p className="flex items-center gap-2"><MapPinIcon /> Guapiles, Limon, Costa Rica</p>
                 <p className="flex items-center gap-2"><ShieldIcon /> Operadores certificados y respaldo local</p>
                 <p className="flex items-center gap-2"><GlobeIcon /> Experiencias rurales, playa y aventura</p>
-                <a href="/contacto" className="mt-2 inline-block font-extrabold text-emerald-700">Ver contacto completo</a>
+                <Link href="/contacto" className="mt-2 inline-block font-extrabold text-emerald-700">Ver contacto completo</Link>
               </div>
             </aside>
           </div>
