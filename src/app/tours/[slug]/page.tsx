@@ -173,7 +173,7 @@ function shiftMonth(date: Date, amount: number): Date {
 }
 
 function normalizeTour(raw: Partial<Tour> | null | undefined): Tour | null {
-  if (!raw?.id || !raw.title || !raw.description) return null;
+  if (!raw?.id || !raw.title) return null;
 
   const safeImages = Array.isArray(raw.images) && raw.images.length ? raw.images : [TOUR_PLACEHOLDER_IMAGE];
 
@@ -186,7 +186,7 @@ function normalizeTour(raw: Partial<Tour> | null | undefined): Tour | null {
     id: raw.id,
     title: raw.title,
     slug: typeof raw.slug === "string" && raw.slug.trim() ? raw.slug : slugifyTourValue(raw.title),
-    description: raw.description,
+    description: typeof raw.description === "string" ? raw.description : "",
     price: typeof raw.price === "number" ? raw.price : 0,
     images: safeImages,
     category: { name: raw.category?.name ?? "Tour" },

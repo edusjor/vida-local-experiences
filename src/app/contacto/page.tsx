@@ -9,19 +9,48 @@ export default function ContactoPage() {
   const [email, setEmail] = React.useState('');
   const [mensaje, setMensaje] = React.useState('');
   const [status, setStatus] = React.useState('');
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre || !email || !mensaje || !asunto) {
       setStatus('Por favor completa todos los campos');
       return;
     }
-    setStatus('Mensaje enviado correctamente. Te responderemos en menos de 24 horas.');
-    setNombre('');
-    setTelefono('');
-    setAsunto('Consulta general');
-    setEmail('');
-    setMensaje('');
+
+    setIsSubmitting(true);
+    setStatus('Enviando mensaje...');
+
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: nombre.trim(),
+          telefono: telefono.trim(),
+          asunto: asunto.trim(),
+          email: email.trim(),
+          mensaje: mensaje.trim(),
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setStatus(data?.error || 'No se pudo enviar tu consulta. Intenta nuevamente.');
+        return;
+      }
+
+      setStatus('Mensaje enviado correctamente. Te responderemos en menos de 24 horas.');
+      setNombre('');
+      setTelefono('');
+      setAsunto('Consulta general');
+      setEmail('');
+      setMensaje('');
+    } catch {
+      setStatus('No se pudo enviar tu consulta por un error de conexion.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -37,14 +66,14 @@ export default function ContactoPage() {
       <div className="mt-6 grid gap-6 md:grid-cols-3">
         <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Telefono</p>
-          <p className="mt-2 text-2xl font-extrabold text-emerald-800">+506 800-123-456</p>
-          <p className="mt-2 text-sm text-slate-600">Atencion de lunes a domingo de 8:00 AM a 8:00 PM.</p>
+          <p className="mt-2 text-2xl font-extrabold text-emerald-800">+506 7154-6738</p>
+          <p className="mt-2 text-sm text-slate-600">Atencion de lunes a domingo de 8:00 AM a 5:00 PM.</p>
         </article>
 
         <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-bold uppercase tracking-wide text-slate-500">Email</p>
-          <a href="mailto:info@guapileslineatours.com" className="mt-2 block text-xl font-extrabold text-emerald-800 underline underline-offset-4">
-            info@guapileslineatours.com
+          <a href="mailto:atencionalcliente@guapileslineatours.com" className="mt-2 block text-xl font-extrabold text-emerald-800 underline underline-offset-4">
+            atencionalcliente@guapileslineatours.com
           </a>
           <p className="mt-2 text-sm text-slate-600">Respuestas en menos de 24 horas habiles.</p>
         </article>
@@ -122,9 +151,10 @@ export default function ContactoPage() {
 
             <button
               type="submit"
-              className="md:col-span-2 rounded-lg bg-amber-400 px-4 py-3 text-base font-extrabold text-slate-900 transition hover:bg-amber-300"
+              disabled={isSubmitting}
+              className="md:col-span-2 rounded-lg bg-amber-400 px-4 py-3 text-base font-extrabold text-slate-900 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              Enviar consulta
+              {isSubmitting ? 'Enviando...' : 'Enviar consulta'}
             </button>
           </form>
 

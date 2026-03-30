@@ -309,7 +309,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ]
         : [];
 
-  if (tourPackages.length === 0) {
+  const requiresFullTourValidation = req.method === 'POST' || req.method === 'PUT';
+
+  if (requiresFullTourValidation && tourPackages.length === 0) {
     return res.status(400).json({ error: 'Cada tour debe tener al menos un paquete con titulo y precios.' });
   }
 

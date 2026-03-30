@@ -1,4 +1,30 @@
 import Link from "next/link";
+import FeaturedToursSlice from "./components/FeaturedToursSlice";
+import { prisma } from "../lib/prisma";
+
+type FeaturedTourView = {
+  id: number;
+  title: string;
+  image: string;
+  description: string;
+  categoryName: string;
+  priceLabel: string;
+  location: string;
+  featured: boolean;
+};
+
+const TOUR_PLACEHOLDER_IMAGE = "/tour-placeholder.svg";
+
+function buildFeaturedLocation(zone?: string | null, country?: string | null): string {
+  const parts = [zone, country].map((item) => String(item ?? "").trim()).filter(Boolean);
+  return parts.length ? parts.join(", ") : "";
+}
+
+function buildFeaturedPriceLabel(price?: number | null): string {
+  const numeric = typeof price === "number" && Number.isFinite(price) ? price : 0;
+  if (numeric === 0) return "Gratis";
+  return `$${numeric.toFixed(2)}`;
+}
 
 function IconWrap({ children }: { children: React.ReactNode }) {
   return <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">{children}</span>;
@@ -69,7 +95,44 @@ function SparkIcon() {
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  let featuredTours: FeaturedTourView[] = [];
+
+  try {
+    const featuredRaw = await prisma.tour.findMany({
+      where: { featured: true },
+      orderBy: { id: "desc" },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        price: true,
+        images: true,
+        zone: true,
+        country: true,
+        featured: true,
+        category: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    featuredTours = featuredRaw.map((tour) => ({
+      id: tour.id,
+      title: tour.title,
+      image: Array.isArray(tour.images) && tour.images[0] ? tour.images[0] : TOUR_PLACEHOLDER_IMAGE,
+      description: String(tour.description ?? ""),
+      categoryName: String(tour.category?.name ?? "Tour"),
+      priceLabel: buildFeaturedPriceLabel(tour.price),
+      location: buildFeaturedLocation(tour.zone, tour.country),
+      featured: Boolean(tour.featured),
+    }));
+  } catch {
+    featuredTours = [];
+  }
+
   return (
     <div>
       <section className="hero-wrap">
@@ -128,61 +191,21 @@ export default function Home() {
             </div>
           </div>
           <img
-            src="https://images.unsplash.com/photo-1607748851687-ba9a10438621?auto=format&fit=crop&w=1000&q=80"
+            src="https://images.unsplash.com/photo-1659120409178-afa7c3630bb4?auto=format&fit=crop&w=1000&q=80"
             alt="Guia local de turismo"
             className="h-72 w-full rounded-2xl object-cover shadow-xl"
           />
         </div>
       </section>
 
-      <section className="jungle-band py-12 text-white">
-        <div className="mx-auto max-w-6xl px-4">
-          <h2 className="text-center text-3xl font-extrabold">Tours destacados</h2>
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
-            {[
-              {
-                title: "Surf Lessons",
-                place: "Manuel Antonio",
-                image:
-                  "https://images.unsplash.com/photo-1473116763249-2faaef81ccda?auto=format&fit=crop&w=900&q=80",
-              },
-              {
-                title: "Pesca Deportiva",
-                place: "Marina Pez Vela",
-                image:
-                  "https://images.unsplash.com/photo-1535591273668-578e31182c4f?auto=format&fit=crop&w=900&q=80",
-              },
-              {
-                title: "Snorkel Privado",
-                place: "Costa Pacifico",
-                image:
-                  "https://images.unsplash.com/photo-1560275619-4662e36fa65c?auto=format&fit=crop&w=900&q=80",
-              },
-            ].map((item) => (
-              <article key={item.title} className="overflow-hidden rounded-2xl bg-white text-slate-900 shadow-2xl shadow-emerald-950/30">
-                <img src={item.image} alt={item.title} className="h-44 w-full object-cover" />
-                <div className="p-4">
-                  <p className="text-2xl font-extrabold text-emerald-900">{item.title}</p>
-                  <p className="mt-1 flex items-center gap-1 text-sm font-semibold text-slate-500">
-                    <MapPinIcon />
-                    {item.place}
-                  </p>
-                  <p className="mt-2 flex items-center gap-1 text-xs font-bold text-slate-500">
-                    <ClockIcon />
-                    Medio dia
-                  </p>
-                  <Link
-                    href="/tours"
-                    className="mt-4 inline-block rounded-lg bg-amber-400 px-5 py-2 text-sm font-extrabold text-slate-900 transition hover:bg-amber-300"
-                  >
-                    Ver tour
-                  </Link>
-                </div>
-              </article>
-            ))}
+      {featuredTours.length > 0 && (
+        <section className="jungle-band py-12 text-white">
+          <div className="mx-auto max-w-6xl px-4">
+            <h2 className="text-center text-3xl font-extrabold">Tours destacados</h2>
+            <FeaturedToursSlice tours={featuredTours} />
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <section className="bg-white py-12">
         <div className="mx-auto max-w-6xl px-4">
@@ -214,7 +237,7 @@ export default function Home() {
               <h3 className="text-2xl font-extrabold">Canales de atencion</h3>
               <div className="mt-4 space-y-3 text-sm font-semibold text-emerald-50">
                 <p className="flex items-center gap-2"><PhoneIcon /> +506 6015 9782 / +506 7154 6738</p>
-                <p className="flex items-center gap-2"><MailIcon /> atencion.guapiles@lineatours.cr</p>
+                <p className="flex items-center gap-2"><MailIcon /> atencionalcliente@guapileslineatours.com</p>
                 <p className="flex items-center gap-2"><ClockIcon /> Lunes a Viernes, 8:00 am a 5:00 pm</p>
                 <p className="flex items-center gap-2"><MapPinIcon /> Costa Rica, Limon, Pococi, La Colonia</p>
               </div>
@@ -242,16 +265,22 @@ export default function Home() {
           <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_0.85fr]">
             <form className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm md:grid-cols-3">
               <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"><MapPinIcon /></span>
-                <input className="w-full rounded-lg border border-slate-300 py-2 pl-10 pr-3" placeholder="Nombre" />
+                <span className="pointer-events-none absolute left-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md bg-white text-slate-500">
+                  <MapPinIcon />
+                </span>
+                <input className="w-full rounded-lg border border-slate-300 py-3 pl-12 pr-3 text-sm" placeholder="Nombre" />
               </div>
               <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"><MailIcon /></span>
-                <input className="w-full rounded-lg border border-slate-300 py-2 pl-10 pr-3" placeholder="Email" />
+                <span className="pointer-events-none absolute left-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md bg-white text-slate-500">
+                  <MailIcon />
+                </span>
+                <input className="w-full rounded-lg border border-slate-300 py-3 pl-12 pr-3 text-sm" placeholder="Email" />
               </div>
               <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"><PhoneIcon /></span>
-                <input className="w-full rounded-lg border border-slate-300 py-2 pl-10 pr-3" placeholder="Telefono" />
+                <span className="pointer-events-none absolute left-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md bg-white text-slate-500">
+                  <PhoneIcon />
+                </span>
+                <input className="w-full rounded-lg border border-slate-300 py-3 pl-12 pr-3 text-sm" placeholder="Telefono" />
               </div>
               <textarea className="md:col-span-3 rounded-lg border border-slate-300 px-3 py-2" rows={4} placeholder="Mensaje" />
               <button
@@ -263,10 +292,16 @@ export default function Home() {
             </form>
 
             <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <img
-                src="https://images.unsplash.com/photo-1526778548025-fa2f459cd5ce?auto=format&fit=crop&w=900&q=80"
-                alt="Ubicacion de tours"
-                className="h-40 w-full object-cover"
+              <iframe
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d4882.188570334864!2d-83.8047022!3d10.2454627!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x8fa0b9c803e1fc55%3A0x4b43d6084e269201!2sLINEA%20TOURS%20-%20Agencia%20de%20Viajes!5e1!3m2!1ses!2scr!4v1774907290615!5m2!1ses!2scr"
+                width="400"
+                height="300"
+                style={{ border: 0 }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                className="h-56 w-full"
+                title="Mapa de LINEA TOURS"
               />
               <div className="space-y-2 p-4 text-sm text-slate-700">
                 <p className="flex items-center gap-2"><MapPinIcon /> Guapiles, Limon, Costa Rica</p>
