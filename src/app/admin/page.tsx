@@ -921,6 +921,7 @@ function AdminPageContent() {
   const [featuredImageUrl, setFeaturedImageUrl] = useState<string | null>(null);
   const faqCsvInputRef = useRef<HTMLInputElement | null>(null);
   const importToursCsvRef = useRef<HTMLInputElement | null>(null);
+  const quickCsvInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<TourStatus>("BORRADOR");
   const [featured, setFeatured] = useState(false);
@@ -1624,6 +1625,61 @@ function AdminPageContent() {
       type: "success",
       message: `Se exportaron ${toursToExport.length} tours a CSV.`,
     });
+  };
+
+  const handleImportQuickCsv = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+
+    const text = await file.text();
+    if (!text.trim()) {
+      setFeedback({ type: "error", message: "El archivo CSV rapido esta vacio." });
+      return;
+    }
+
+    setFeedback({ type: "success", message: "Importando CSV rapido..." });
+
+    try {
+      const res = await fetch("/api/admin/tours-csv-quick", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csvText: text }),
+      });
+
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        setFeedback({ type: "error", message: payload?.error || "No se pudo importar el CSV rapido." });
+        return;
+      }
+
+      await loadData();
+      setFeedback({
+        type: "success",
+        message: `CSV rapido importado: ${Number(payload?.created ?? 0)} creados, ${Number(payload?.updated ?? 0)} actualizados${Number(payload?.skipped ?? 0) > 0 ? `, ${Number(payload?.skipped ?? 0)} omitidos` : ""}.`,
+      });
+    } catch {
+      setFeedback({ type: "error", message: "Error de red al importar CSV rapido." });
+    } finally {
+      if (quickCsvInputRef.current) quickCsvInputRef.current.value = "";
+    }
+  };
+
+  const handleExportQuickCsv = async () => {
+    try {
+      const res = await fetch("/api/admin/tours-csv-quick");
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        setFeedback({ type: "error", message: payload?.error || "No se pudo exportar el CSV rapido." });
+        return;
+      }
+
+      const csv = await res.text();
+      const timestamp = getCsvTimestamp();
+      downloadCsv(csv, `tours-quick-format-${timestamp}.csv`);
+      setFeedback({ type: "success", message: "CSV rapido exportado correctamente." });
+    } catch {
+      setFeedback({ type: "error", message: "Error de red al exportar CSV rapido." });
+    }
   };
 
   const handleImportFaqCsv = async (files: FileList | null) => {
