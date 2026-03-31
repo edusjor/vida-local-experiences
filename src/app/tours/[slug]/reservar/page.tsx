@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 type OnvoPayConfig = {
   onError?: (data: unknown) => void;
@@ -122,6 +122,13 @@ interface TourLite {
   availabilityConfig?: AvailabilityConfig;
 }
 
+type PhoneCountryOption = {
+  code: string;
+  dialCode: string;
+  flag: string;
+  name: string;
+};
+
 const defaultOpenSchedule: OpenScheduleConfig = {
   maxPeople: 10,
   startTime: "08:00",
@@ -136,6 +143,20 @@ const defaultAvailabilityConfig: AvailabilityConfig = {
   openSchedule: defaultOpenSchedule,
   dateSchedules: {},
 };
+
+const phoneCountryOptions: PhoneCountryOption[] = [
+  { code: "CR", dialCode: "+506", flag: "🇨🇷", name: "Costa Rica" },
+  { code: "PA", dialCode: "+507", flag: "🇵🇦", name: "Panama" },
+  { code: "NI", dialCode: "+505", flag: "🇳🇮", name: "Nicaragua" },
+  { code: "HN", dialCode: "+504", flag: "🇭🇳", name: "Honduras" },
+  { code: "SV", dialCode: "+503", flag: "🇸🇻", name: "El Salvador" },
+  { code: "GT", dialCode: "+502", flag: "🇬🇹", name: "Guatemala" },
+  { code: "MX", dialCode: "+52", flag: "🇲🇽", name: "Mexico" },
+  { code: "CO", dialCode: "+57", flag: "🇨🇴", name: "Colombia" },
+  { code: "US", dialCode: "+1", flag: "🇺🇸", name: "Estados Unidos" },
+  { code: "CA", dialCode: "+1", flag: "🇨🇦", name: "Canada" },
+  { code: "ES", dialCode: "+34", flag: "🇪🇸", name: "Espana" },
+];
 
 function normalizeTime24(value: unknown): string | null {
   const trimmed = String(value ?? "").trim();
@@ -169,6 +190,11 @@ function formatTimeLabel(time24: string): string {
   const suffix = hoursRaw >= 12 ? "PM" : "AM";
   const hours = hoursRaw % 12 || 12;
   return `${hours}:${String(minutesRaw).padStart(2, "0")} ${suffix}`;
+}
+
+function getCurrentTime24(): string {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 }
 
 function buildIntervalTimeSlots(startTime: string, endTime: string, intervalMinutes: number): string[] {
@@ -285,12 +311,37 @@ function toDateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function normalizeDateKeyInput(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  const simple = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (simple) return `${simple[1]}-${simple[2]}-${simple[3]}`;
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return toDateKey(parsed);
+}
+
 function monthStart(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
 function monthEnd(date: Date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+function toMonthKeyFromDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function fromMonthKey(monthKey: string): Date | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(monthKey);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return null;
+  return new Date(year, month - 1, 1);
 }
 
 function normalizePriceOptions(items: unknown): TourPriceOption[] {
@@ -434,11 +485,28 @@ export default function ReservarPage() {
   const searchParams = useSearchParams();
   const tourSlug = typeof params?.slug === "string" ? params.slug : "";
   const packageFromQuery = searchParams?.get("package") ?? null;
+  const dateFromQuery = searchParams?.get("date") ?? null;
 
-  return <ReservarPageContent key={`${tourSlug}:${packageFromQuery ?? "default"}`} tourSlug={tourSlug} packageFromQuery={packageFromQuery} />;
+  return (
+    <ReservarPageContent
+      key={`${tourSlug}:${packageFromQuery ?? "default"}:${dateFromQuery ?? "no-date"}`}
+      tourSlug={tourSlug}
+      packageFromQuery={packageFromQuery}
+      dateFromQuery={dateFromQuery}
+    />
+  );
 }
 
-function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string; packageFromQuery: string | null }) {
+function ReservarPageContent({
+  tourSlug,
+  packageFromQuery,
+  dateFromQuery,
+}: {
+  tourSlug: string;
+  packageFromQuery: string | null;
+  dateFromQuery: string | null;
+}) {
+  const router = useRouter();
   const [hydrated, setHydrated] = useState(false);
 
   const [tour, setTour] = useState<TourLite | null>(null);
@@ -456,7 +524,7 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
   const [name, setName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [emailConfirm, setEmailConfirm] = useState("");
+  const [phoneCountryDialCode, setPhoneCountryDialCode] = useState("");
   const [phone, setPhone] = useState("");
   const [hotel, setHotel] = useState("");
   const [payMethod, setPayMethod] = useState("Tarjeta de Credito o Debito (ONVO)");
@@ -464,11 +532,12 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
   const [sinpeReceiptUrl, setSinpeReceiptUrl] = useState("");
   const [isUploadingSinpeReceipt, setIsUploadingSinpeReceipt] = useState(false);
   const [isCreatingPayment, setIsCreatingPayment] = useState(false);
-  const [isReservationConfirmed, setIsReservationConfirmed] = useState(false);
-  const [confirmedReservationId, setConfirmedReservationId] = useState<number | null>(null);
+  const [isRedirectingToConfirmation, setIsRedirectingToConfirmation] = useState(false);
 
   const [status, setStatus] = useState("");
   const [remainingSeconds, setRemainingSeconds] = useState(15 * 60);
+  const todayDateKey = toDateKey(new Date());
+  const normalizedDateFromQuery = normalizeDateKeyInput(dateFromQuery);
 
   useEffect(() => {
     setHydrated(true);
@@ -477,12 +546,23 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
     // Pre-populate desde localStorage mientras carga el API
     const localData = getLocalReservationSeed(tourSlug);
     if (localData.tour) {
+      const localAvailabilityFuture = localData.availability.filter((item) => String(item.date).slice(0, 10) >= todayDateKey);
+      const firstFutureDateKey = localAvailabilityFuture[0] ? String(localAvailabilityFuture[0].date).slice(0, 10) : null;
+      const queryDateIsFuture = Boolean(normalizedDateFromQuery && normalizedDateFromQuery >= todayDateKey);
       setTour(localData.tour);
-      setAvailability(localData.availability);
+      setAvailability(localAvailabilityFuture);
       setAvailabilityConfig(localData.availabilityConfig);
-      const firstDateKey = localData.availability[0] ? String(localData.availability[0].date).slice(0, 10) : null;
-      setSelectedDateKey(firstDateKey ?? (localData.availabilityConfig.mode === "OPEN" ? toDateKey(new Date()) : null));
-      setVisibleMonth(localData.visibleMonth);
+      setSelectedDateKey(queryDateIsFuture ? normalizedDateFromQuery : firstFutureDateKey ?? (localData.availabilityConfig.mode === "OPEN" ? todayDateKey : null));
+
+      if (queryDateIsFuture) {
+        const queryDate = new Date(`${normalizedDateFromQuery}T00:00:00`);
+        setVisibleMonth(new Date(queryDate.getFullYear(), queryDate.getMonth(), 1));
+      } else if (localAvailabilityFuture[0]) {
+        const firstDate = new Date(localAvailabilityFuture[0].date);
+        setVisibleMonth(new Date(firstDate.getFullYear(), firstDate.getMonth(), 1));
+      } else {
+        setVisibleMonth(localData.availabilityConfig.mode === "OPEN" ? monthStart(new Date()) : localData.visibleMonth);
+      }
     }
 
     fetch(`/api/tour?slug=${encodeURIComponent(tourSlug)}`)
@@ -490,7 +570,9 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
       .then((data) => {
         if (data?.id) {
           const nextConfig = normalizeAvailabilityConfig(data.availabilityConfig);
-          const nextAvailability = applyDateSchedulesToAvailability(sanitizeAvailabilityItems(data.availability), nextConfig.dateSchedules);
+          const nextAvailabilityRaw = applyDateSchedulesToAvailability(sanitizeAvailabilityItems(data.availability), nextConfig.dateSchedules);
+          const nextAvailability = nextAvailabilityRaw.filter((item) => String(item.date).slice(0, 10) >= todayDateKey);
+          const queryDateIsFuture = Boolean(normalizedDateFromQuery && normalizedDateFromQuery >= todayDateKey);
 
           setTour({
             id: data.id,
@@ -503,8 +585,11 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
           });
           setAvailabilityConfig(nextConfig);
           setAvailability(nextAvailability);
-          setSelectedDateKey(nextAvailability[0] ? String(nextAvailability[0].date).slice(0, 10) : nextConfig.mode === "OPEN" ? toDateKey(new Date()) : null);
-          if (nextAvailability[0]) {
+          setSelectedDateKey(queryDateIsFuture ? normalizedDateFromQuery : nextAvailability[0] ? String(nextAvailability[0].date).slice(0, 10) : nextConfig.mode === "OPEN" ? todayDateKey : null);
+          if (queryDateIsFuture) {
+            const queryDate = new Date(`${normalizedDateFromQuery}T00:00:00`);
+            setVisibleMonth(new Date(queryDate.getFullYear(), queryDate.getMonth(), 1));
+          } else if (nextAvailability[0]) {
             const first = new Date(nextAvailability[0].date);
             setVisibleMonth(new Date(first.getFullYear(), first.getMonth(), 1));
           } else if (nextConfig.mode === "OPEN") {
@@ -518,7 +603,7 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
       .catch(() => {
         setLoadError("No se pudo cargar la informacion del tour desde el servidor.");
       });
-  }, [tourSlug]);
+  }, [normalizedDateFromQuery, todayDateKey, tourSlug]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -622,10 +707,23 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
   const selectedDateTimeOptions = useMemo(() => {
     if (!selectedDate) return [] as string[];
     const fromDate = normalizeTimeSlots(selectedDate.timeSlots);
-    if (fromDate.length) return fromDate;
-    if (availabilityConfig.mode === "OPEN") return openScheduleSlots;
-    return [] as string[];
+    const baseOptions = fromDate.length ? fromDate : availabilityConfig.mode === "OPEN" ? openScheduleSlots : [];
+    const selectedKey = activeSelectedDateKey;
+    if (!selectedKey || selectedKey !== todayDateKey) return baseOptions;
+
+    const nowTime = getCurrentTime24();
+    return baseOptions.filter((time24) => time24 >= nowTime);
+  }, [activeSelectedDateKey, availabilityConfig.mode, openScheduleSlots, selectedDate, todayDateKey]);
+
+  const hasConfiguredTimeSlots = useMemo(() => {
+    if (!selectedDate) return false;
+    const fromDate = normalizeTimeSlots(selectedDate.timeSlots);
+    if (fromDate.length) return true;
+    return availabilityConfig.mode === "OPEN" && openScheduleSlots.length > 0;
   }, [availabilityConfig.mode, openScheduleSlots, selectedDate]);
+
+  const hasNoRemainingTimeToday =
+    activeSelectedDateKey === todayDateKey && hasConfiguredTimeSlots && selectedDateTimeOptions.length === 0;
 
   const calendarHasOpenAvailability = availabilityConfig.mode === "OPEN";
 
@@ -652,6 +750,56 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
     return dayCells;
   }, [visibleMonth]);
 
+  const specificAvailableMonthKeys = useMemo(() => {
+    if (availabilityConfig.mode === "OPEN") return [] as string[];
+    const keys = Array.from(availabilityByDateKey.keys()).filter((key) => key >= todayDateKey);
+    return Array.from(new Set(keys.map((key) => key.slice(0, 7)))).sort();
+  }, [availabilityByDateKey, availabilityConfig.mode, todayDateKey]);
+
+  const visibleMonthKey = useMemo(() => {
+    if (!visibleMonth) return null;
+    return toMonthKeyFromDate(visibleMonth);
+  }, [visibleMonth]);
+
+  const previousSpecificAvailableMonthKey = useMemo(() => {
+    if (!visibleMonthKey) return null;
+    const previous = specificAvailableMonthKeys.filter((key) => key < visibleMonthKey);
+    return previous.length ? previous[previous.length - 1] : null;
+  }, [specificAvailableMonthKeys, visibleMonthKey]);
+
+  const nextSpecificAvailableMonthKey = useMemo(() => {
+    if (!visibleMonthKey) return null;
+    const next = specificAvailableMonthKeys.find((key) => key > visibleMonthKey);
+    return next ?? null;
+  }, [specificAvailableMonthKeys, visibleMonthKey]);
+
+  useEffect(() => {
+    if (availabilityConfig.mode === "OPEN") return;
+    if (!specificAvailableMonthKeys.length || !visibleMonthKey) return;
+    if (specificAvailableMonthKeys.includes(visibleMonthKey)) return;
+
+    const firstMonth = fromMonthKey(specificAvailableMonthKeys[0]);
+    if (firstMonth) setVisibleMonth(firstMonth);
+  }, [availabilityConfig.mode, specificAvailableMonthKeys, visibleMonthKey]);
+
+  useEffect(() => {
+    if (!activeSelectedDateKey) return;
+    if (activeSelectedDateKey >= todayDateKey) return;
+
+    const futureDateKeys = Array.from(availabilityByDateKey.keys()).filter((key) => key >= todayDateKey).sort();
+    if (futureDateKeys[0]) {
+      setSelectedDateKey(futureDateKeys[0]);
+      return;
+    }
+
+    if (availabilityConfig.mode === "OPEN") {
+      setSelectedDateKey(todayDateKey);
+      return;
+    }
+
+    setSelectedDateKey(null);
+  }, [activeSelectedDateKey, availabilityByDateKey, availabilityConfig.mode, todayDateKey]);
+
   const countdownLabel = useMemo(() => {
     const min = Math.floor(remainingSeconds / 60)
       .toString()
@@ -660,11 +808,26 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
     return `${min}:${sec}`;
   }, [remainingSeconds]);
 
-  const canContinueToPay =
-    name.trim() && lastName.trim() && email.trim() && emailConfirm.trim() && email === emailConfirm && phone.trim();
+  const canContinueToPay = name.trim() && lastName.trim() && email.trim() && phoneCountryDialCode.trim() && phone.trim();
   const minimumPeople = Math.max(1, tour?.minPeople ?? 1);
   const meetsMinimumPeople = totalPeople >= minimumPeople;
   const isSinpeMobileMethod = payMethod === "SINPE Movil";
+
+  const navigateToConfirmation = (input: {
+    reservationId: number;
+    status: "confirmed" | "pending_validation";
+    paymentMethod: string;
+    message: string;
+  }) => {
+    setIsRedirectingToConfirmation(true);
+    const query = new URLSearchParams({
+      reserva: String(input.reservationId),
+      estado: input.status,
+      metodo: input.paymentMethod,
+      mensaje: input.message,
+    });
+    router.push(`/reserva-confirmada?${query.toString()}`);
+  };
 
   const confirmPaymentWithRetry = async (reservationId: number, paymentIntentId: string): Promise<{ ok: boolean; message: string }> => {
     const maxAttempts = 8;
@@ -711,6 +874,11 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
 
   const handleReserve = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (hasNoRemainingTimeToday) {
+      setStatus("Ya no hay horarios disponibles para hoy. Elige otra fecha.");
+      return;
+    }
 
     const people = totalPeople;
     if (people <= 0) {
@@ -773,6 +941,8 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
       setIsCreatingPayment(true);
       setStatus(isSinpeMobileMethod ? "Validando reserva SINPE..." : "Preparando tu reserva y creando la sesion de pago...");
 
+      const fullPhone = `${phoneCountryDialCode} ${phone}`.trim();
+
       const res = await fetch("/api/reservar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -785,8 +955,7 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
           name,
           lastName,
           email,
-          emailConfirm,
-          phone,
+          phone: fullPhone,
           hotel,
           paymentMethod: payMethod,
           sinpeReceiptUrl: uploadedSinpeReceiptUrl,
@@ -805,11 +974,24 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
 
       if (!payload?.requiresPayment) {
         const reservationId = Number(payload?.reservationId);
-        if (Number.isFinite(reservationId) && reservationId > 0) {
-          setConfirmedReservationId(reservationId);
+        if (!Number.isFinite(reservationId) || reservationId <= 0) {
+          setStatus("La reserva se creo, pero no se recibio un numero de reserva valido.");
+          return;
         }
-        setIsReservationConfirmed(true);
-        setStatus(payload?.message || "Reserva confirmada. Te enviamos el detalle por correo.");
+
+        const nextStatus = isSinpeMobileMethod ? "pending_validation" : "confirmed";
+        const nextMessage =
+          String(payload?.message || "").trim() ||
+          (isSinpeMobileMethod
+            ? "Reserva recibida. Tu pago por SINPE queda pendiente de validacion administrativa."
+            : "Reserva confirmada. Te enviamos el detalle por correo.");
+
+        navigateToConfirmation({
+          reservationId,
+          status: nextStatus,
+          paymentMethod: payMethod,
+          message: nextMessage,
+        });
         return;
       }
 
@@ -856,9 +1038,12 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
               return;
             }
 
-            setStatus(confirmation.message);
-            setConfirmedReservationId(reservationId);
-            setIsReservationConfirmed(true);
+            navigateToConfirmation({
+              reservationId,
+              status: "confirmed",
+              paymentMethod: "Tarjeta de Credito o Debito (ONVO)",
+              message: confirmation.message,
+            });
           } catch {
             setStatus("Pago recibido, pero no se pudo validar la reserva por un error de conexion.");
           }
@@ -942,10 +1127,18 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
               <div className="mb-3 flex items-center justify-between">
                 <button
                   type="button"
-                  onClick={() =>
-                    setVisibleMonth((prev) => (prev ? new Date(prev.getFullYear(), prev.getMonth() - 1, 1) : prev))
-                  }
-                  className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-700"
+                  onClick={() => {
+                    if (availabilityConfig.mode === "OPEN") {
+                      setVisibleMonth((prev) => (prev ? new Date(prev.getFullYear(), prev.getMonth() - 1, 1) : prev));
+                      return;
+                    }
+
+                    if (!previousSpecificAvailableMonthKey) return;
+                    const month = fromMonthKey(previousSpecificAvailableMonthKey);
+                    if (month) setVisibleMonth(month);
+                  }}
+                  disabled={availabilityConfig.mode !== "OPEN" && !previousSpecificAvailableMonthKey}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Prev
                 </button>
@@ -956,10 +1149,18 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
                 </p>
                 <button
                   type="button"
-                  onClick={() =>
-                    setVisibleMonth((prev) => (prev ? new Date(prev.getFullYear(), prev.getMonth() + 1, 1) : prev))
-                  }
-                  className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-700"
+                  onClick={() => {
+                    if (availabilityConfig.mode === "OPEN") {
+                      setVisibleMonth((prev) => (prev ? new Date(prev.getFullYear(), prev.getMonth() + 1, 1) : prev));
+                      return;
+                    }
+
+                    if (!nextSpecificAvailableMonthKey) return;
+                    const month = fromMonthKey(nextSpecificAvailableMonthKey);
+                    if (month) setVisibleMonth(month);
+                  }}
+                  disabled={availabilityConfig.mode !== "OPEN" && !nextSpecificAvailableMonthKey}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Next
                 </button>
@@ -978,12 +1179,15 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
                   }
 
                   const key = toDateKey(day);
+                  const isPastDay = key < todayDateKey;
                   const available = availabilityByDateKey.get(key);
-                  const canSelect = Boolean(available) || calendarHasOpenAvailability;
+                  const canSelect = (Boolean(available) || calendarHasOpenAvailability) && !isPastDay;
                   const isActive = activeSelectedDateKey === key;
 
                   const openMaxLabel = availabilityConfig.openSchedule.maxPeople;
-                  const tooltip = available
+                  const tooltip = isPastDay
+                    ? "No disponible. Solo se permiten fechas desde hoy."
+                    : available
                     ? `${available.maxPeople} lugares max.`
                     : calendarHasOpenAvailability
                       ? `Modo abierto: ${openMaxLabel} lugares max.`
@@ -1029,6 +1233,9 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
                     </option>
                   ))}
                 </select>
+                {hasNoRemainingTimeToday ? (
+                  <p className="mt-2 text-xs font-bold text-rose-700">Ya no quedan horarios para hoy. Selecciona otra fecha.</p>
+                ) : null}
               </div>
 
               <div>
@@ -1136,19 +1343,29 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
-                <input
-                  type="email"
-                  className="rounded-lg border border-slate-300 px-3 py-2"
-                  placeholder="Confirmar correo"
-                  value={emailConfirm}
-                  onChange={(e) => setEmailConfirm(e.target.value)}
-                />
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2"
-                  placeholder="Telefono"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
+                <div className="md:col-span-2 grid gap-2 sm:grid-cols-[1.2fr_1.8fr]">
+                  <div className="rounded-lg border border-slate-300 bg-white px-3 py-2">
+                    <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Pais y codigo</label>
+                    <select
+                      className="w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm"
+                      value={phoneCountryDialCode}
+                      onChange={(e) => setPhoneCountryDialCode(e.target.value)}
+                    >
+                      <option value="">Selecciona un pais</option>
+                      {phoneCountryOptions.map((option) => (
+                        <option key={`${option.code}-${option.dialCode}`} value={option.dialCode}>
+                          {option.flag} {option.name} ({option.dialCode})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <input
+                    className="rounded-lg border border-slate-300 px-3 py-2"
+                    placeholder="Telefono"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                </div>
                 <input
                   className="rounded-lg border border-slate-300 px-3 py-2"
                   placeholder="Hotel o lugar de hospedaje"
@@ -1182,37 +1399,12 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
 
             {step === "pago" && (
               <form onSubmit={handleReserve} className="mt-4 space-y-3">
-                {isReservationConfirmed ? (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                    <h3 className="text-lg font-extrabold text-emerald-900">Reserva confirmada</h3>
-                    <p className="mt-2 text-sm font-semibold text-emerald-800">
-                      Tu pago fue procesado correctamente y tu espacio ya quedo asegurado.
-                    </p>
-                    {confirmedReservationId ? (
-                      <p className="mt-2 text-sm text-emerald-900">
-                        Numero de reserva: <span className="font-extrabold">#{confirmedReservationId}</span>
-                      </p>
-                    ) : null}
-                    <p className="mt-2 text-sm text-emerald-900">
-                      Siguiente paso: recibirás el correo de confirmacion con los detalles de tu tour.
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <a
-                        href="/tours"
-                        className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-extrabold text-white transition hover:bg-emerald-600"
-                      >
-                        Ver mas tours
-                      </a>
-                    </div>
-                  </div>
-                ) : null}
-
-                {["Tarjeta de Credito o Debito (ONVO)", "Wallets disponibles en ONVO", "SINPE Movil"].map((method) => (
+                {["Tarjeta de Credito o Debito (ONVO)", "SINPE Movil"].map((method) => (
                   <button
                     type="button"
                     key={method}
                     onClick={() => setPayMethod(method)}
-                    disabled={isReservationConfirmed}
+                    disabled={isRedirectingToConfirmation}
                     className={`w-full rounded-lg border px-4 py-3 text-left font-semibold transition ${
                       payMethod === method
                         ? "border-emerald-700 bg-emerald-50 text-emerald-900"
@@ -1257,15 +1449,16 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
                   disabled={
                     totalPeople <= 0 ||
                     !meetsMinimumPeople ||
+                    hasNoRemainingTimeToday ||
                     isCreatingPayment ||
                     isUploadingSinpeReceipt ||
-                    isReservationConfirmed ||
+                    isRedirectingToConfirmation ||
                     (isSinpeMobileMethod && !sinpeReceiptFile && !sinpeReceiptUrl)
                   }
                   className="mt-3 w-full rounded-lg bg-amber-400 px-4 py-3 text-base font-extrabold text-slate-900 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                  {isReservationConfirmed
-                    ? "Reserva finalizada"
+                  {isRedirectingToConfirmation
+                    ? "Redirigiendo..."
                     : isUploadingSinpeReceipt
                       ? "Subiendo comprobante..."
                       : isCreatingPayment
@@ -1275,7 +1468,7 @@ function ReservarPageContent({ tourSlug, packageFromQuery }: { tourSlug: string;
                           : "Confirmar reserva y pagar"}
                 </button>
 
-                {!isReservationConfirmed && !isSinpeMobileMethod ? (
+                {!isSinpeMobileMethod ? (
                   <div id="onvo-checkout-container" className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3" />
                 ) : null}
               </form>

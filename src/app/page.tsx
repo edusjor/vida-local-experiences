@@ -1,5 +1,6 @@
 import Link from "next/link";
 import FeaturedToursSlice from "./components/FeaturedToursSlice";
+import ContactUnifiedForm from "./components/ContactUnifiedForm";
 import { prisma } from "../lib/prisma";
 
 type FeaturedTourView = {
@@ -263,33 +264,9 @@ export default async function Home() {
         <div className="mx-auto max-w-6xl px-4">
           <h2 className="text-center text-3xl font-extrabold text-emerald-900">Listo para planear tu aventura</h2>
           <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_0.85fr]">
-            <form className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm md:grid-cols-3">
-              <div className="relative">
-                <span className="pointer-events-none absolute left-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md bg-white text-slate-500">
-                  <MapPinIcon />
-                </span>
-                <input className="w-full rounded-lg border border-slate-300 py-3 pl-12 pr-3 text-sm" placeholder="Nombre" />
-              </div>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md bg-white text-slate-500">
-                  <MailIcon />
-                </span>
-                <input className="w-full rounded-lg border border-slate-300 py-3 pl-12 pr-3 text-sm" placeholder="Email" />
-              </div>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md bg-white text-slate-500">
-                  <PhoneIcon />
-                </span>
-                <input className="w-full rounded-lg border border-slate-300 py-3 pl-12 pr-3 text-sm" placeholder="Telefono" />
-              </div>
-              <textarea className="md:col-span-3 rounded-lg border border-slate-300 px-3 py-2" rows={4} placeholder="Mensaje" />
-              <button
-                type="button"
-                className="md:col-span-3 rounded-lg bg-amber-400 px-6 py-3 font-extrabold text-slate-900 transition hover:bg-amber-300"
-              >
-                Enviar consulta
-              </button>
-            </form>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+              <ContactUnifiedForm className="grid gap-3 md:grid-cols-3" />
+            </div>
 
             <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <iframe

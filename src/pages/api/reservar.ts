@@ -35,6 +35,23 @@ type SelectedPriceInput = {
   quantity?: unknown;
 };
 
+const CARD_PAYMENT_METHOD = 'Tarjeta de Credito o Debito (ONVO)';
+const SINPE_PAYMENT_METHOD = 'SINPE Movil';
+
+function normalizePaymentMethod(input: unknown): string | null {
+  const raw = String(input ?? '').trim();
+  if (!raw) return CARD_PAYMENT_METHOD;
+
+  const lowered = raw.toLowerCase();
+  if (lowered.includes('sinpe')) return SINPE_PAYMENT_METHOD;
+
+  const seemsCardMethod =
+    lowered.includes('tarjeta') || lowered.includes('onvo') || lowered.includes('credito') || lowered.includes('debito');
+  if (seemsCardMethod) return CARD_PAYMENT_METHOD;
+
+  return null;
+}
+
 function normalizeTime24(value: unknown): string | null {
   const trimmed = String(value ?? '').trim();
   const match = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
@@ -281,9 +298,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'El correo y su confirmacion no coinciden' });
   }
 
-  const normalizedPaymentMethod = String(paymentMethod ?? '').trim();
+  const normalizedPaymentMethod = normalizePaymentMethod(paymentMethod);
+  if (!normalizedPaymentMethod) {
+    return res.status(400).json({ error: 'Metodo de pago invalido. Usa tarjeta (ONVO) o SINPE Movil.' });
+  }
+
   const normalizedSinpeReceiptUrl = String(sinpeReceiptUrl ?? '').trim();
-  const isSinpeMobile = normalizedPaymentMethod.toLowerCase() === 'sinpe movil';
+  const isSinpeMobile = normalizedPaymentMethod === SINPE_PAYMENT_METHOD;
 
   if (isSinpeMobile && !normalizedSinpeReceiptUrl.startsWith('/uploads/receipts/')) {
     return res.status(400).json({ error: 'Debes subir el comprobante SINPE para completar la reserva.' });
@@ -459,7 +480,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             emailConfirm,
             phone,
             hotel,
-            paymentMethod: normalizedPaymentMethod || paymentMethod,
+            paymentMethod: normalizedPaymentMethod,
             sinpeReceiptUrl: isSinpeMobile ? normalizedSinpeReceiptUrl : null,
             promoCode,
             scheduleTime: scheduleTimeNormalized || scheduleTime,
@@ -482,6 +503,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({
         ok: true,
         requiresPayment: false,
+        reservationStatus: 'PENDING_VALIDATION',
         reservationId: result.reservationId,
         message: 'Reserva recibida con comprobante SINPE. Queda pendiente de validacion por administracion.',
       });
@@ -491,6 +513,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({
         ok: true,
         requiresPayment: false,
+        reservationStatus: 'CONFIRMED',
         reservationId: result.reservationId,
         message: 'Reserva confirmada. No se requiere pago para esta seleccion.',
       });
@@ -516,9 +539,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         paymentIntentId: paymentIntent.id,
         publicKey,
       });
-    } catch {
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Error desconocido al crear payment intent';
       await prisma.reservation.delete({ where: { id: result.reservationId } }).catch(() => null);
-      return res.status(502).json({ error: 'No se pudo iniciar el pago en ONVO' });
+      return res.status(502).json({
+        error: `No se pudo iniciar el pago en ONVO: ${detail}`,
+        detail,
+      });
     }
   } catch {
     return res.status(500).json({ error: 'No se pudo completar la reserva' });

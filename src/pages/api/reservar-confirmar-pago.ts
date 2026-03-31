@@ -123,7 +123,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const paymentIntent = await getOnvoPaymentIntent(paymentIntentId);
-    if (paymentIntent.status !== 'succeeded') {
+    const normalizedPaymentStatus = String(paymentIntent.status ?? '').toLowerCase();
+    const approvedStatuses = new Set(['succeeded', 'paid', 'approved']);
+
+    if (!approvedStatuses.has(normalizedPaymentStatus)) {
       return res.status(202).json({
         pending: true,
         status: paymentIntent.status,

@@ -168,8 +168,21 @@ function toMonthStart(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
-function shiftMonth(date: Date, amount: number): Date {
-  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+function toMonthKeyFromDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function toMonthKeyFromDateKey(dateKey: string): string {
+  return dateKey.slice(0, 7);
+}
+
+function fromMonthKey(monthKey: string): Date | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(monthKey);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return null;
+  return new Date(year, month - 1, 1);
 }
 
 function normalizeTour(raw: Partial<Tour> | null | undefined): Tour | null {
@@ -240,6 +253,8 @@ function buildTourRouteParam(tour: Pick<Tour, "id" | "slug">): string {
 export default function TourDetailPage() {
   const params = useParams();
   const tourSlug = typeof params?.slug === "string" ? params.slug : "";
+  const today = new Date();
+  const todayDateKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const [tour, setTour] = useState<Tour | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [selectedAvailabilityDate, setSelectedAvailabilityDate] = useState<string>("");
@@ -330,10 +345,26 @@ export default function TourDetailPage() {
   const availableDateKeys = useMemo(() => {
     return sortedAvailability
       .map((item) => toDateKey(item.date))
-      .filter(Boolean);
-  }, [sortedAvailability]);
+      .filter((key) => Boolean(key) && key >= todayDateKey);
+  }, [sortedAvailability, todayDateKey]);
 
   const availableDateSet = useMemo(() => new Set(availableDateKeys), [availableDateKeys]);
+
+  const availableMonthKeys = useMemo(() => {
+    return Array.from(new Set(availableDateKeys.map((key) => toMonthKeyFromDateKey(key)))).sort();
+  }, [availableDateKeys]);
+
+  const calendarMonthKey = useMemo(() => toMonthKeyFromDate(calendarMonth), [calendarMonth]);
+
+  const previousAvailableMonthKey = useMemo(() => {
+    const previous = availableMonthKeys.filter((key) => key < calendarMonthKey);
+    return previous.length ? previous[previous.length - 1] : null;
+  }, [availableMonthKeys, calendarMonthKey]);
+
+  const nextAvailableMonthKey = useMemo(() => {
+    const next = availableMonthKeys.find((key) => key > calendarMonthKey);
+    return next ?? null;
+  }, [availableMonthKeys, calendarMonthKey]);
 
   const monthLabel = useMemo(() => {
     return calendarMonth.toLocaleDateString("es-CR", { month: "long", year: "numeric" });
@@ -392,6 +423,16 @@ export default function TourDetailPage() {
       }
     }
   }, [availableDateKeys, availableDateSet, selectedAvailabilityDate]);
+
+  useEffect(() => {
+    if (!availableMonthKeys.length) return;
+    if (availableMonthKeys.includes(calendarMonthKey)) return;
+
+    const nextMonth = fromMonthKey(availableMonthKeys[0]);
+    if (nextMonth) {
+      setCalendarMonth(nextMonth);
+    }
+  }, [availableMonthKeys, calendarMonthKey]);
 
   const imagePool = useMemo(() => {
     if (!tour || !detail) return [];
@@ -701,16 +742,26 @@ export default function TourDetailPage() {
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <button
                     type="button"
-                    onClick={() => setCalendarMonth((prev) => shiftMonth(prev, -1))}
-                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-emerald-300"
+                    onClick={() => {
+                      if (!previousAvailableMonthKey) return;
+                      const month = fromMonthKey(previousAvailableMonthKey);
+                      if (month) setCalendarMonth(month);
+                    }}
+                    disabled={!previousAvailableMonthKey}
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Anterior
                   </button>
                   <p className="text-sm font-bold capitalize text-slate-800">{monthLabel}</p>
                   <button
                     type="button"
-                    onClick={() => setCalendarMonth((prev) => shiftMonth(prev, 1))}
-                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-emerald-300"
+                    onClick={() => {
+                      if (!nextAvailableMonthKey) return;
+                      const month = fromMonthKey(nextAvailableMonthKey);
+                      if (month) setCalendarMonth(month);
+                    }}
+                    disabled={!nextAvailableMonthKey}
+                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Siguiente
                   </button>

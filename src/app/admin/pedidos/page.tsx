@@ -33,6 +33,12 @@ function formatDate(value: string): string {
   return date.toLocaleString("es-CR");
 }
 
+function formatScheduleLabel(value: string | null): string {
+  const normalized = String(value ?? "").trim();
+  if (!normalized || normalized.toLowerCase() === "por coordinar") return "Sin hora";
+  return normalized;
+}
+
 export default function AdminOrdersPage() {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -191,7 +197,10 @@ export default function AdminOrdersPage() {
                   <tr key={item.id}>
                     <td className="px-3 py-3 font-extrabold text-slate-800">#{item.id}</td>
                     <td className="px-3 py-3 text-slate-700">{formatDate(item.createdAt)}</td>
-                    <td className="px-3 py-3 text-slate-700">{formatDate(item.date)}</td>
+                    <td className="px-3 py-3 text-slate-700">
+                      <p>{formatDate(item.date)}</p>
+                      <p className="text-xs font-semibold text-slate-500">Hora: {formatScheduleLabel(item.scheduleTime)}</p>
+                    </td>
                     <td className="px-3 py-3 text-slate-800">{item.tour?.title || "-"}</td>
                     <td className="px-3 py-3 text-slate-700">
                       <p className="font-semibold text-slate-900">{[item.name, item.lastName].filter(Boolean).join(" ")}</p>

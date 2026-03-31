@@ -1,58 +1,9 @@
 "use client";
 
 import React from 'react';
+import ContactUnifiedForm from '../components/ContactUnifiedForm';
 
 export default function ContactoPage() {
-  const [nombre, setNombre] = React.useState('');
-  const [telefono, setTelefono] = React.useState('');
-  const [asunto, setAsunto] = React.useState('Consulta general');
-  const [email, setEmail] = React.useState('');
-  const [mensaje, setMensaje] = React.useState('');
-  const [status, setStatus] = React.useState('');
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nombre || !email || !mensaje || !asunto) {
-      setStatus('Por favor completa todos los campos');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setStatus('Enviando mensaje...');
-
-    try {
-      const res = await fetch('/api/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombre: nombre.trim(),
-          telefono: telefono.trim(),
-          asunto: asunto.trim(),
-          email: email.trim(),
-          mensaje: mensaje.trim(),
-        }),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setStatus(data?.error || 'No se pudo enviar tu consulta. Intenta nuevamente.');
-        return;
-      }
-
-      setStatus('Mensaje enviado correctamente. Te responderemos en menos de 24 horas.');
-      setNombre('');
-      setTelefono('');
-      setAsunto('Consulta general');
-      setEmail('');
-      setMensaje('');
-    } catch {
-      setStatus('No se pudo enviar tu consulta por un error de conexion.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
     <section className="mx-auto max-w-6xl px-4 py-10">
       <div className="rounded-3xl bg-gradient-to-r from-emerald-900 via-emerald-700 to-teal-600 px-6 py-10 text-white md:px-10">
@@ -90,75 +41,9 @@ export default function ContactoPage() {
           <h2 className="text-2xl font-extrabold text-slate-900">Envianos tu consulta</h2>
           <p className="mt-2 text-sm text-slate-600">Completa el formulario y te contactamos rapidamente con opciones sugeridas.</p>
 
-          <form className="mt-5 grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-slate-700">Nombre</span>
-              <input
-                type="text"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                required
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-slate-700">Telefono (opcional)</span>
-              <input
-                type="text"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                value={telefono}
-                onChange={(e) => setTelefono(e.target.value)}
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-slate-700">Email</span>
-              <input
-                type="email"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-slate-700">Asunto</span>
-              <select
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                value={asunto}
-                onChange={(e) => setAsunto(e.target.value)}
-                required
-              >
-                <option>Consulta general</option>
-                <option>Cotizacion personalizada</option>
-                <option>Soporte de reserva</option>
-                <option>Grupos y eventos</option>
-              </select>
-            </label>
-
-            <label className="block md:col-span-2">
-              <span className="mb-1 block text-sm font-semibold text-slate-700">Mensaje</span>
-              <textarea
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                rows={5}
-                value={mensaje}
-                onChange={(e) => setMensaje(e.target.value)}
-                required
-              />
-            </label>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="md:col-span-2 rounded-lg bg-amber-400 px-4 py-3 text-base font-extrabold text-slate-900 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {isSubmitting ? 'Enviando...' : 'Enviar consulta'}
-            </button>
-          </form>
-
-          {status && <div className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{status}</div>}
+          <div className="mt-5">
+            <ContactUnifiedForm className="grid gap-4 md:grid-cols-2" />
+          </div>
         </article>
 
         <div className="space-y-6">
