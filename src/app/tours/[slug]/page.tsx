@@ -506,8 +506,12 @@ export default function TourDetailPage() {
 
   if (loading) {
     return (
-      <section className="mx-auto max-w-6xl px-4 py-10">
-        <p className="rounded-xl bg-white p-6 text-slate-700 shadow">Cargando experiencia...</p>
+      <section className="mx-auto max-w-6xl px-4 py-14">
+        <div className="mx-auto max-w-md rounded-2xl border border-emerald-200/70 bg-white/90 p-8 text-center shadow-[0_12px_32px_rgba(15,23,42,0.1)]">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600" aria-hidden="true" />
+          <p className="mt-4 text-base font-bold text-slate-800">Cargando experiencia...</p>
+          <p className="mt-1 text-sm text-slate-600">Consultando disponibilidad y detalles del tour.</p>
+        </div>
       </section>
     );
   }
@@ -597,7 +601,12 @@ export default function TourDetailPage() {
         <div>
           <div className="grid gap-3 md:grid-cols-[1.35fr_1fr]">
             <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <img src={imagesForView[galleryMainIndex]} alt={tour.title} className="h-[420px] w-full object-cover" />
+              <img
+                src={imagesForView[galleryMainIndex]}
+                alt={tour.title}
+                className="h-[420px] w-full cursor-zoom-in object-cover"
+                onClick={() => setLightboxIndex(galleryMainIndex)}
+              />
               <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-slate-900/65 to-transparent p-3">
                 <div className="flex items-center gap-2">
                   <button
@@ -615,22 +624,25 @@ export default function TourDetailPage() {
                     Next
                   </button>
                 </div>
-                <button
-                  type="button"
-                  className="rounded-md bg-amber-300 px-2 py-1 text-xs font-bold text-slate-900"
-                  onClick={() => setLightboxIndex(galleryMainIndex)}
-                >
-                  Ampliar
-                </button>
               </div>
             </div>
 
             <div className="grid gap-3">
               <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <img src={imagesForView[sideTopIndex]} alt={`${tour.title} preview 1`} className="h-[203px] w-full object-cover" />
+                <img
+                  src={imagesForView[sideTopIndex]}
+                  alt={`${tour.title} preview 1`}
+                  className="h-[203px] w-full cursor-zoom-in object-cover"
+                  onClick={() => setLightboxIndex(sideTopIndex)}
+                />
               </div>
               <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <img src={imagesForView[sideBottomIndex]} alt={`${tour.title} preview 2`} className="h-[203px] w-full object-cover" />
+                <img
+                  src={imagesForView[sideBottomIndex]}
+                  alt={`${tour.title} preview 2`}
+                  className="h-[203px] w-full cursor-zoom-in object-cover"
+                  onClick={() => setLightboxIndex(sideBottomIndex)}
+                />
               </div>
             </div>
           </div>
@@ -889,14 +901,38 @@ export default function TourDetailPage() {
       </div>
 
       {lightboxIndex !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/85 p-4" role="dialog" aria-modal="true">
-          <div className="relative w-full max-w-6xl rounded-2xl bg-slate-950 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/85 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setLightboxIndex(null)}
+        >
+          <div className="relative w-full max-w-6xl rounded-2xl bg-slate-950 p-4" onClick={(event) => event.stopPropagation()}>
             <button
               type="button"
               onClick={() => setLightboxIndex(null)}
-              className="absolute right-3 top-3 rounded-md bg-white px-3 py-1 text-sm font-bold text-slate-900"
+              className="absolute right-3 top-3 z-10 h-9 w-9 rounded-full bg-white text-lg font-bold leading-none text-slate-900"
+              aria-label="Cerrar imagen"
             >
-              Cerrar
+              X
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setLightboxIndex(slideBack(lightboxIndex))}
+              className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/45 px-3 py-2 text-2xl font-bold leading-none text-white transition hover:bg-black/65"
+              aria-label="Imagen anterior"
+            >
+              &lt;
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setLightboxIndex(slideNext(lightboxIndex))}
+              className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/45 px-3 py-2 text-2xl font-bold leading-none text-white transition hover:bg-black/65"
+              aria-label="Imagen siguiente"
+            >
+              &gt;
             </button>
 
             <img
@@ -905,25 +941,9 @@ export default function TourDetailPage() {
               className="max-h-[80vh] w-full rounded-xl object-contain"
             />
 
-            <div className="mt-4 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setLightboxIndex(slideBack(lightboxIndex))}
-                className="rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-900"
-              >
-                Imagen anterior
-              </button>
-              <p className="text-sm text-slate-300">
-                {lightboxIndex + 1} / {imagesForView.length}
-              </p>
-              <button
-                type="button"
-                onClick={() => setLightboxIndex(slideNext(lightboxIndex))}
-                className="rounded-md bg-slate-100 px-3 py-2 text-sm font-bold text-slate-900"
-              >
-                Imagen siguiente
-              </button>
-            </div>
+            <p className="mt-4 text-center text-sm text-slate-300">
+              {lightboxIndex + 1} / {imagesForView.length}
+            </p>
           </div>
         </div>
       )}

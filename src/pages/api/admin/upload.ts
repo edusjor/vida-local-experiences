@@ -29,9 +29,8 @@ function toArray(value: FormidableFile | FormidableFile[] | undefined): Formidab
 async function parseForm(req: NextApiRequest): Promise<formidable.Files> {
   const form = formidable({
     multiples: true,
-    maxFiles: 30,
-    maxFileSize: 1024 * 1024 * 1024,
-    maxTotalFileSize: 1024 * 1024 * 1024,
+    maxFileSize: Number.MAX_SAFE_INTEGER,
+    maxTotalFileSize: Number.MAX_SAFE_INTEGER,
     filter: ({ mimetype, originalFilename }) => {
       if (typeof mimetype === 'string' && mimetype.startsWith('image/')) return true;
       const ext = path.extname(originalFilename || '').toLowerCase();

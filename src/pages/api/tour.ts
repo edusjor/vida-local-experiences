@@ -44,14 +44,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     if (typeof slug === 'string' && slug.length > 0) {
-      // Resolve by slug without using Prisma `where.slug`, so this works even with a stale generated client.
-      const tours = await prisma.tour.findMany({
-        include: { category: true, availability: true },
-      });
-      tour =
-        tours.find((item) => String((item as { slug?: unknown }).slug ?? '').trim() === slug) ||
-        tours.find((item) => slugifyTourValue(String(item.title ?? '')) === slug) ||
-        null;
+      // Resolve fast path by slug via SQL to avoid stale Prisma client type issues.
+      const directRows = await prisma.$queryRaw<Array<{ id: number }>>`
+        SELECT "id"
+        FROM "Tour"
+        WHERE "slug" = ${slug}
+        LIMIT 1
+      `;
+
+      let targetId = directRows[0]?.id;
+
+      // Backward-compatible fallback for legacy routes where slug came from title.
+      if (!targetId) {
+        const titleCandidates = await prisma.tour.findMany({
+          select: { id: true, title: true },
+        });
+
+        targetId =
+          titleCandidates.find((item) => slugifyTourValue(String(item.title ?? '')) === slug)?.id;
+      }
+
+      if (targetId) {
+        tour = await prisma.tour.findUnique({
+          where: { id: targetId },
+          include: { category: true, availability: true },
+        });
+      }
     } else if (typeof id === 'string' && id.length > 0) {
       const parsedId = Number(id);
       if (Number.isFinite(parsedId)) {
