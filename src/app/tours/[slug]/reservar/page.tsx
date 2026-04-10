@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { phoneCountryOptions } from "../../../../lib/phoneCountryOptions";
 
 type OnvoPayConfig = {
   onError?: (data: unknown) => void;
@@ -122,13 +123,6 @@ interface TourLite {
   availabilityConfig?: AvailabilityConfig;
 }
 
-type PhoneCountryOption = {
-  code: string;
-  dialCode: string;
-  flag: string;
-  name: string;
-};
-
 const defaultOpenSchedule: OpenScheduleConfig = {
   maxPeople: 10,
   startTime: "08:00",
@@ -143,20 +137,6 @@ const defaultAvailabilityConfig: AvailabilityConfig = {
   openSchedule: defaultOpenSchedule,
   dateSchedules: {},
 };
-
-const phoneCountryOptions: PhoneCountryOption[] = [
-  { code: "CR", dialCode: "+506", flag: "🇨🇷", name: "Costa Rica" },
-  { code: "PA", dialCode: "+507", flag: "🇵🇦", name: "Panama" },
-  { code: "NI", dialCode: "+505", flag: "🇳🇮", name: "Nicaragua" },
-  { code: "HN", dialCode: "+504", flag: "🇭🇳", name: "Honduras" },
-  { code: "SV", dialCode: "+503", flag: "🇸🇻", name: "El Salvador" },
-  { code: "GT", dialCode: "+502", flag: "🇬🇹", name: "Guatemala" },
-  { code: "MX", dialCode: "+52", flag: "🇲🇽", name: "Mexico" },
-  { code: "CO", dialCode: "+57", flag: "🇨🇴", name: "Colombia" },
-  { code: "US", dialCode: "+1", flag: "🇺🇸", name: "Estados Unidos" },
-  { code: "CA", dialCode: "+1", flag: "🇨🇦", name: "Canada" },
-  { code: "ES", dialCode: "+34", flag: "🇪🇸", name: "Espana" },
-];
 
 function normalizeTime24(value: unknown): string | null {
   const trimmed = String(value ?? "").trim();

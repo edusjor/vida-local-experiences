@@ -1,26 +1,7 @@
 "use client";
 
 import React from "react";
-
-type PhoneCountryOption = {
-  code: string;
-  dialCode: string;
-  name: string;
-};
-
-const phoneCountryOptions: PhoneCountryOption[] = [
-  { code: "CR", dialCode: "+506", name: "Costa Rica" },
-  { code: "PA", dialCode: "+507", name: "Panama" },
-  { code: "NI", dialCode: "+505", name: "Nicaragua" },
-  { code: "HN", dialCode: "+504", name: "Honduras" },
-  { code: "SV", dialCode: "+503", name: "El Salvador" },
-  { code: "GT", dialCode: "+502", name: "Guatemala" },
-  { code: "MX", dialCode: "+52", name: "Mexico" },
-  { code: "CO", dialCode: "+57", name: "Colombia" },
-  { code: "US", dialCode: "+1", name: "Estados Unidos" },
-  { code: "CA", dialCode: "+1", name: "Canada" },
-  { code: "ES", dialCode: "+34", name: "Espana" },
-];
+import { phoneCountryOptions } from "../../lib/phoneCountryOptions";
 
 export default function ContactUnifiedForm({
   className = "grid gap-4 md:grid-cols-2",

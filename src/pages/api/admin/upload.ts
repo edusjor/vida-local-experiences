@@ -96,7 +96,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     for (const file of candidates) {
       if (!file?.filepath) continue;
       const ext = getSafeExtension(file);
-      const name = `tour-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+      const baseName = path.basename(file.originalFilename || '', path.extname(file.originalFilename || ''))
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // quita tildes
+        .replace(/ñ/g, 'n')
+        .replace(/[^a-z0-9._\- ]/g, '')
+        .trim()
+        .replace(/\s+/g, '-')
+        || `tour-${Date.now()}`;
+      let name = `${baseName}${ext}`;
+      // Avoid overwriting an existing file with the same name
+      if (await fs.access(path.join(uploadDir, name)).then(() => true).catch(() => false)) {
+        name = `${baseName}-${Date.now()}${ext}`;
+      }
       const destination = path.join(uploadDir, name);
       await moveFileWithFallback(file.filepath, destination);
       urls.push(`/uploads/tours/${name}`);

@@ -949,6 +949,8 @@ function AdminPageContent() {
   const [isFilterConfigOpen, setIsFilterConfigOpen] = useState(false);
   const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const confirmCloseResolveRef = useRef<((value: boolean) => void) | null>(null);
   const [editorInitial, setEditorInitial] = useState<TourEditorState | null>(null);
 
   const [editingTourId, setEditingTourId] = useState<number | null>(null);
@@ -2274,13 +2276,16 @@ function AdminPageContent() {
     setIsEditorOpen(true);
   };
 
+  const showConfirmClose = (): Promise<boolean> =>
+    new Promise((resolve) => {
+      confirmCloseResolveRef.current = resolve;
+      setConfirmCloseOpen(true);
+    });
+
   const handleCloseEditor = async () => {
     if (editorHasChanges) {
-      const shouldSave = window.confirm("Hay cambios sin guardar. Deseas guardar antes de cerrar?");
-      if (shouldSave) {
-        const saved = await handleCreateOrUpdateTour();
-        if (!saved) return;
-      }
+      const abandon = await showConfirmClose();
+      if (!abandon) return;
     }
 
     if (isEditorRoute) {
@@ -4211,6 +4216,37 @@ function AdminPageContent() {
               {categories.length === 0 && <p className="text-sm text-slate-500">No hay categorias registradas.</p>}
             </div>
           </article>
+        </div>
+      )}
+
+      {confirmCloseOpen && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => { confirmCloseResolveRef.current?.(false); setConfirmCloseOpen(false); }}
+        >
+          <div
+            className="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 text-base font-bold text-slate-800">¿Abandonar la edicion?</p>
+            <p className="mb-6 text-sm text-slate-500">Tienes cambios sin guardar. Si abandonas se perderan.</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                onClick={() => { confirmCloseResolveRef.current?.(false); setConfirmCloseOpen(false); }}
+              >
+                Seguir editando
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
+                onClick={() => { confirmCloseResolveRef.current?.(true); setConfirmCloseOpen(false); }}
+              >
+                Abandonar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

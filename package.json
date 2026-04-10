@@ -21,6 +21,7 @@
     "@prisma/client": "^6.19.2",
     "cheerio": "^1.2.0",
     "formidable": "^3.5.4",
+    "libphonenumber-js": "^1.12.41",
     "next": "16.1.6",
     "nodemailer": "^8.0.4",
     "prisma": "^6.19.2",
