@@ -52,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         LIMIT 1
       `;
 
-      let targetId = directRows[0]?.id;
+      let targetId: number | null = directRows[0]?.id ?? null;
 
       // Backward-compatible fallback for legacy routes where slug came from title.
       if (!targetId) {
@@ -61,10 +61,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
 
         targetId =
-          titleCandidates.find((item) => slugifyTourValue(String(item.title ?? '')) === slug)?.id;
+          titleCandidates.find((item) => slugifyTourValue(String(item.title ?? '')) === slug)?.id ?? null;
       }
 
-      if (targetId) {
+      if (targetId !== null) {
         tour = await prisma.tour.findUnique({
           where: { id: targetId },
           include: { category: true, availability: true },
