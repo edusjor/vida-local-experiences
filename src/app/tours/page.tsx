@@ -157,6 +157,35 @@ function getBasePriceOption(options: TourPriceOption[] | undefined): TourPriceOp
   return options.find((option) => option.isBase) || null;
 }
 
+function normalizeOptionPrice(option: TourPriceOption): number {
+  if (option.isFree || option.price === 0) return 0;
+  return Number.isFinite(option.price) ? option.price : NaN;
+}
+
+function getReservableOptionPrices(tour: Tour): number[] {
+  const packagePrices = Array.isArray(tour.tourPackages)
+    ? tour.tourPackages.flatMap((pkg) =>
+      Array.isArray(pkg.priceOptions)
+        ? pkg.priceOptions.map((option) => normalizeOptionPrice(option)).filter((value) => Number.isFinite(value))
+        : [],
+    )
+    : [];
+
+  if (packagePrices.length > 0) return packagePrices;
+
+  const legacyOptionPrices = Array.isArray(tour.priceOptions)
+    ? tour.priceOptions.map((option) => normalizeOptionPrice(option)).filter((value) => Number.isFinite(value))
+    : [];
+
+  if (legacyOptionPrices.length > 0) return legacyOptionPrices;
+
+  if (typeof tour.price === "number" && Number.isFinite(tour.price) && tour.price > 0) {
+    return [tour.price];
+  }
+
+  return [];
+}
+
 function hasReservablePricing(tour: Tour): boolean {
   const hasPackagePricing = Array.isArray(tour.tourPackages)
     && tour.tourPackages.some((pkg) => Array.isArray(pkg.priceOptions) && pkg.priceOptions.length > 0);
@@ -169,22 +198,9 @@ function hasReservablePricing(tour: Tour): boolean {
 }
 
 function getEffectiveTourPrice(tour: Tour): number {
-  const firstPackageWithPrices = Array.isArray(tour.tourPackages)
-    ? tour.tourPackages.find((pkg) => Array.isArray(pkg.priceOptions) && pkg.priceOptions.length > 0)
-    : null;
-
-  if (firstPackageWithPrices) {
-    const baseFromPackage = getBasePriceOption(firstPackageWithPrices.priceOptions) || firstPackageWithPrices.priceOptions[0] || null;
-    if (baseFromPackage) {
-      if (baseFromPackage.isFree || baseFromPackage.price === 0) return 0;
-      if (Number.isFinite(baseFromPackage.price)) return baseFromPackage.price;
-    }
-  }
-
-  const baseOption = getBasePriceOption(tour.priceOptions);
-  if (!baseOption) return tour.price;
-  if (baseOption.isFree || baseOption.price === 0) return 0;
-  return Number.isFinite(baseOption.price) ? baseOption.price : tour.price;
+  const allPrices = getReservableOptionPrices(tour);
+  if (allPrices.length === 0) return tour.price;
+  return Math.min(...allPrices);
 }
 
 function getTourPriceLabel(tour: Tour): string | null {
@@ -290,9 +306,8 @@ export default function ToursPage() {
 
   const numericRanges = useMemo(() => {
     const prices = tours
-      .filter((t) => hasReservablePricing(t))
-      .map((t) => getEffectiveTourPrice(t))
-      .filter((v) => Number.isFinite(v));
+      .filter((tour) => !tour.isDeleted && (tour.status ?? "BORRADOR") === "ACTIVO")
+      .flatMap((tour) => getReservableOptionPrices(tour));
     const dayValues = tours.map((t) => t.durationDays ?? 0).filter((v) => v > 0);
 
     return {
@@ -406,8 +421,9 @@ export default function ToursPage() {
 
       if (filterConfig.price) {
         if (hasReservablePricing(tour)) {
-          const effectivePrice = getEffectiveTourPrice(tour);
-          if (effectivePrice < priceMin || effectivePrice > priceMax) return false;
+          const optionPrices = getReservableOptionPrices(tour);
+          const matchesPriceRange = optionPrices.some((value) => value >= priceMin && value <= priceMax);
+          if (!matchesPriceRange) return false;
         }
       }
 

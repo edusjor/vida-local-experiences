@@ -9,6 +9,16 @@ function firstValue(value: string | string[] | undefined): string {
   return Array.isArray(value) ? String(value[0] ?? "") : String(value ?? "");
 }
 
+function normalizeComparableText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export default async function ReservaConfirmadaPage({
   searchParams,
 }: {
@@ -30,6 +40,9 @@ export default async function ReservaConfirmadaPage({
     (isPendingValidation
       ? "Nuestro equipo validara el comprobante SINPE y te notificaremos por correo."
       : "Te enviamos la confirmacion al correo registrado.");
+  const normalizedSubtitle = normalizeComparableText(subtitle);
+  const normalizedSummary = normalizeComparableText(summary);
+  const shouldShowSummary = isPendingValidation && normalizedSummary.length > 0 && normalizedSummary !== normalizedSubtitle;
 
   return (
     <section className="mx-auto max-w-3xl px-4 py-10">
@@ -48,7 +61,7 @@ export default async function ReservaConfirmadaPage({
 
         <h1 className="mt-4 text-3xl font-black text-slate-900">{title}</h1>
         <p className="mt-2 text-sm font-semibold text-slate-700">{subtitle}</p>
-        <p className="mt-3 text-sm text-slate-700">{summary}</p>
+        {shouldShowSummary ? <p className="mt-3 text-sm text-slate-700">{summary}</p> : null}
 
         <div className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 sm:grid-cols-2">
           <p>

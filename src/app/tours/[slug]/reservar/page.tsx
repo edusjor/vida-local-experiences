@@ -306,8 +306,8 @@ function normalizeDateKeyInput(value: unknown): string | null {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
 
-  const simple = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-  if (simple) return `${simple[1]}-${simple[2]}-${simple[3]}`;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (dateOnly) return `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]}`;
 
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return null;
@@ -486,7 +486,7 @@ function ReservarPageContent({
   const [visibleMonth, setVisibleMonth] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState("");
   const [priceQuantities, setPriceQuantities] = useState<Record<string, number>>({});
-  const [step, setStep] = useState<"contacto" | "pago">("contacto");
+  const [step, setStep] = useState<"seleccion" | "contacto" | "pago">("seleccion");
 
   const [name, setName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -499,9 +499,11 @@ function ReservarPageContent({
   const [sinpeReceiptUrl, setSinpeReceiptUrl] = useState("");
   const [isUploadingSinpeReceipt, setIsUploadingSinpeReceipt] = useState(false);
   const [isCreatingPayment, setIsCreatingPayment] = useState(false);
+  const [isConfirmingReservation, setIsConfirmingReservation] = useState(false);
   const [isRedirectingToConfirmation, setIsRedirectingToConfirmation] = useState(false);
 
   const [status, setStatus] = useState("");
+  const [stepError, setStepError] = useState<{ step: "seleccion" | "contacto" | "pago"; message: string } | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(15 * 60);
   const todayDateKey = toDateKey(new Date());
   const normalizedDateFromQuery = normalizeDateKeyInput(dateFromQuery);
@@ -647,7 +649,7 @@ function ReservarPageContent({
     if (availabilityConfig.mode === "OPEN") return new Map<string, Availability>();
     const map = new Map<string, Availability>();
     availability.forEach((item) => {
-      const key = toDateKey(new Date(item.date));
+      const key = String(item.date).slice(0, 10);
       if (!map.has(key)) map.set(key, item);
     });
     return map;
@@ -781,10 +783,72 @@ function ReservarPageContent({
     return `${min}:${sec}`;
   }, [remainingSeconds]);
 
-  const canContinueToPay = !isInfoOnlyTour && name.trim() && lastName.trim() && email.trim() && phoneCountryDialCode.trim() && phone.trim();
   const minimumPeople = Math.max(1, tour?.minPeople ?? 1);
   const meetsMinimumPeople = totalPeople >= minimumPeople;
+  const hasSelectionStepCompleted =
+    !isInfoOnlyTour &&
+    Boolean(activeSelectedDateKey) &&
+    totalPeople > 0 &&
+    meetsMinimumPeople &&
+    !hasNoRemainingTimeToday;
+  const canContinueToPay =
+    hasSelectionStepCompleted &&
+    name.trim() &&
+    lastName.trim() &&
+    email.trim() &&
+    phoneCountryDialCode.trim() &&
+    phone.trim();
   const isSinpeMobileMethod = payMethod === "SINPE Movil";
+
+  useEffect(() => {
+    if (step === "pago" && !canContinueToPay) {
+      setStep(hasSelectionStepCompleted ? "contacto" : "seleccion");
+      return;
+    }
+
+    if (step === "contacto" && !hasSelectionStepCompleted) {
+      setStep("seleccion");
+    }
+  }, [canContinueToPay, hasSelectionStepCompleted, step]);
+
+  const openSelectionStep = () => {
+    setStepError(null);
+    setStep("seleccion");
+  };
+  const openContactStep = () => {
+    if (isConfirmingReservation) return;
+    if (!hasSelectionStepCompleted) {
+      setStepError({
+        step: "contacto",
+        message:
+        hasNoRemainingTimeToday
+          ? "Ya no hay horarios disponibles para hoy. Elige otra fecha para continuar."
+          : `Completa primero el paso 1 (fecha, horario y minimo ${minimumPeople} persona${minimumPeople === 1 ? "" : "s"}).`,
+      });
+      return;
+    }
+    setStepError(null);
+    setStep("contacto");
+  };
+  const openPaymentStep = () => {
+    if (isConfirmingReservation) return;
+    if (!hasSelectionStepCompleted) {
+      setStepError({
+        step: "pago",
+        message:
+        hasNoRemainingTimeToday
+          ? "Ya no hay horarios disponibles para hoy. Elige otra fecha para continuar."
+          : `Completa primero el paso 1 (fecha, horario y minimo ${minimumPeople} persona${minimumPeople === 1 ? "" : "s"}).`,
+      });
+      return;
+    }
+    if (!canContinueToPay) {
+      setStepError({ step: "pago", message: "Completa tus datos de contacto para poder abrir el paso de pago." });
+      return;
+    }
+    setStepError(null);
+    setStep("pago");
+  };
 
   const navigateToConfirmation = (input: {
     reservationId: number;
@@ -917,6 +981,7 @@ function ReservarPageContent({
 
     try {
       setIsCreatingPayment(true);
+      setIsConfirmingReservation(false);
       setStatus(isSinpeMobileMethod ? "Validando reserva SINPE..." : "Preparando tu reserva y creando la sesion de pago...");
 
       if (!tour) {
@@ -968,7 +1033,12 @@ function ReservarPageContent({
             : "Reserva confirmada. Te enviamos el detalle por correo.");
 
         if (isSinpeMobileMethod) {
-          setStatus(nextMessage);
+          navigateToConfirmation({
+            reservationId,
+            status: "pending_validation",
+            paymentMethod: payMethod,
+            message: nextMessage,
+          });
           return;
         }
 
@@ -1018,9 +1088,11 @@ function ReservarPageContent({
         onSuccess: async () => {
           try {
             setStatus("Pago recibido. Confirmando reserva...");
+            setIsConfirmingReservation(true);
             const confirmation = await confirmPaymentWithRetry(reservationId, paymentIntentId);
             if (!confirmation.ok) {
               setStatus(confirmation.message);
+              setIsConfirmingReservation(false);
               return;
             }
 
@@ -1032,6 +1104,7 @@ function ReservarPageContent({
             });
           } catch {
             setStatus("Pago recibido, pero no se pudo validar la reserva por un error de conexion.");
+            setIsConfirmingReservation(false);
           }
         },
       });
@@ -1099,7 +1172,19 @@ function ReservarPageContent({
           )}
 
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-xl font-extrabold text-slate-900">Selecciona fechas y precio</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-extrabold text-slate-900">Paso 1: Paquete, fecha, horario y personas</h2>
+              <button
+                type="button"
+                className={`rounded-full px-3 py-1 text-xs font-bold ${step === "seleccion" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}`}
+                onClick={openSelectionStep}
+              >
+                Seleccion
+              </button>
+            </div>
+
+            {step === "seleccion" && (
+              <>
 
             {Boolean(tour.tourPackages.length) && (
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
@@ -1300,15 +1385,30 @@ function ReservarPageContent({
               <p className="text-sm text-slate-600">Total:</p>
               <p className="text-3xl font-black text-emerald-800">{formatCurrencyUSD(total)}</p>
             </div>
+
+            <button
+              type="button"
+              onClick={openContactStep}
+              disabled={!hasSelectionStepCompleted || isRedirectingToConfirmation}
+              className="mt-4 w-full rounded-lg bg-emerald-700 px-4 py-3 font-extrabold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              Ir a informacion de contacto
+            </button>
+
+            {stepError?.step === "seleccion" ? (
+              <p className="mt-4 whitespace-pre-line rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{stepError.message}</p>
+            ) : null}
+            </>
+            )}
           </article>
 
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-extrabold text-slate-900">Paso 1: Datos de contacto</h2>
+              <h2 className="text-xl font-extrabold text-slate-900">Paso 2: Datos de contacto</h2>
               <button
                 type="button"
                 className={`rounded-full px-3 py-1 text-xs font-bold ${step === "contacto" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}`}
-                onClick={() => setStep("contacto")}
+                onClick={openContactStep}
               >
                 Contacto
               </button>
@@ -1323,6 +1423,7 @@ function ReservarPageContent({
                     placeholder="Nombre"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
                   />
                 </div>
                 <div>
@@ -1332,6 +1433,7 @@ function ReservarPageContent({
                     placeholder="Apellido"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
+                    disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -1342,6 +1444,7 @@ function ReservarPageContent({
                     placeholder="Correo electronico"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
                   />
                 </div>
                 <div className="md:col-span-2 grid gap-2 sm:grid-cols-[1.2fr_1.8fr]">
@@ -1351,6 +1454,7 @@ function ReservarPageContent({
                       className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3"
                       value={phoneCountryDialCode}
                       onChange={(e) => setPhoneCountryDialCode(e.target.value)}
+                      disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
                     >
                       <option value="">Selecciona un pais</option>
                       {phoneCountryOptions.map((option) => (
@@ -1367,6 +1471,7 @@ function ReservarPageContent({
                       placeholder="Telefono"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
+                      disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
                     />
                   </div>
                 </div>
@@ -1377,12 +1482,13 @@ function ReservarPageContent({
                     placeholder="Hotel o lugar de hospedaje"
                     value={hotel}
                     onChange={(e) => setHotel(e.target.value)}
+                    disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
                   />
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setStep("pago")}
+                  onClick={openPaymentStep}
                   disabled={!canContinueToPay}
                   className="md:col-span-2 mt-2 rounded-lg bg-emerald-700 px-4 py-3 font-extrabold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
@@ -1390,28 +1496,33 @@ function ReservarPageContent({
                 </button>
               </div>
             )}
+
+            {stepError?.step === "contacto" ? (
+              <p className="mt-4 whitespace-pre-line rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{stepError.message}</p>
+            ) : null}
           </article>
 
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-extrabold text-slate-900">Paso 2: Metodo de pago</h2>
+              <h2 className="text-xl font-extrabold text-slate-900">Paso 3: Metodo de pago</h2>
               <button
                 type="button"
                 className={`rounded-full px-3 py-1 text-xs font-bold ${step === "pago" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}`}
-                onClick={() => setStep("pago")}
+                onClick={openPaymentStep}
+                disabled={isConfirmingReservation}
               >
                 Pago
               </button>
             </div>
 
-            {step === "pago" && (
+            {step === "pago" && !isConfirmingReservation && (
               <form onSubmit={handleReserve} className="mt-4 space-y-3">
                 {["Tarjeta de Credito o Debito (ONVO)", "SINPE Movil"].map((method) => (
                   <button
                     type="button"
                     key={method}
                     onClick={() => setPayMethod(method)}
-                    disabled={isRedirectingToConfirmation}
+                    disabled={isRedirectingToConfirmation || isConfirmingReservation}
                     className={`w-full rounded-lg border px-4 py-3 text-left font-semibold transition ${
                       payMethod === method
                         ? "border-emerald-700 bg-emerald-50 text-emerald-900"
@@ -1454,10 +1565,12 @@ function ReservarPageContent({
                 <button
                   type="submit"
                   disabled={
+                    !canContinueToPay ||
                     totalPeople <= 0 ||
                     !meetsMinimumPeople ||
                     hasNoRemainingTimeToday ||
                     isCreatingPayment ||
+                    isConfirmingReservation ||
                     isUploadingSinpeReceipt ||
                     isRedirectingToConfirmation ||
                     (isSinpeMobileMethod && !sinpeReceiptFile && !sinpeReceiptUrl)
@@ -1481,7 +1594,17 @@ function ReservarPageContent({
               </form>
             )}
 
-            {status && (
+            {step === "pago" && isConfirmingReservation ? (
+              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-sm font-semibold text-emerald-800">Pago recibido. Confirmando reserva...</p>
+              </div>
+            ) : null}
+
+            {stepError?.step === "pago" ? (
+              <p className="mt-4 whitespace-pre-line rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{stepError.message}</p>
+            ) : null}
+
+            {status && !isConfirmingReservation && (
               <p className="mt-4 whitespace-pre-line rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{status}</p>
             )}
           </article>

@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { prisma } from '../../lib/prisma';
 import { createOnvoPaymentIntent, getOnvoPublishableKey } from '../../lib/onvo';
+import { sendReservationPendingValidationEmailByReservationId } from '../../lib/reservationPayment';
+import { saveReservationCheckoutDetails } from '../../lib/reservationDetails';
 
 type AvailabilityConfig = {
   mode: 'SPECIFIC' | 'OPEN';
@@ -170,8 +172,8 @@ function toDateKey(date: Date): string {
 function normalizeDateKeyInput(value: unknown): string | null {
   const raw = String(value ?? '').trim();
   if (!raw) return null;
-  const simple = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-  if (simple) return `${simple[1]}-${simple[2]}-${simple[3]}`;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (dateOnly) return `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]}`;
 
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return null;
@@ -506,7 +508,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: result.error });
     }
 
+    const priceBreakdown = selectedOptionRows.map((row) => ({
+      id: row.option.id,
+      name: row.option.name,
+      quantity: row.quantity,
+      unitPrice: row.option.price,
+      totalPrice: roundUsd(row.option.price * row.quantity),
+    }));
+
+    await saveReservationCheckoutDetails({
+      reservationId: result.reservationId,
+      packageTitle: selectedPackage?.title || null,
+      priceBreakdown,
+      totalAmount: total,
+    }).catch(() => null);
+
     if (isSinpeMobile) {
+      await sendReservationPendingValidationEmailByReservationId(result.reservationId).catch(() => null);
       return res.status(200).json({
         ok: true,
         requiresPayment: false,

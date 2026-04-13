@@ -60,3 +60,29 @@ Bajo - Patrón PrismaClient por archivo API puede causar problemas de conexiones
 Cada handler crea su propia instancia en modulo; suele recomendarse singleton compartido en Next para evitar saturacion de conexiones en dev/serverless.
 Evidencia: tours.ts:3, tour.ts:3, reservar.ts:3, tour.ts:3
 
+
+
+-------------------------------------------
+Medio: Ineficiencia y fragilidad bajo concurrencia en creación de reserva
+Hay doble lectura de tour: una fuera de transacción en reservar.ts:314 y otra dentro en reservar.ts:369.
+Se usa Serializable en reservar.ts:501, pero al fallar se devuelve 500 genérico en reservar.ts:558 sin retry para conflictos serializables.
+Impacto: más latencia/consultas por checkout y más errores esporádicos en horas pico.
+Medio: Subida de comprobante expuesta a abuso de almacenamiento
+Endpoint público con validación mínima de método en upload-receipt.ts:53.
+El filtro de archivo depende de mimetype reportado por cliente en upload-receipt.ts:17.
+No se observa control de tasa, captcha o cuota por IP/usuario.
+Impacto: crecimiento de archivos no deseados, costo operativo y degradación de rendimiento con tráfico malicioso.
+Bajo: Ordenamiento admin por createdAt realmente usa id
+En reservations.ts:29, cuando sortBy es createdAt se usa id.
+Impacto: puede mostrar orden incorrecto en casos donde id y createdAt no coinciden (migraciones/imports), afectando revisión operativa.
+Bajo: UX inconsistente en confirmación SINPE
+En src/app/tours/[slug]/reservar/page.tsx, cuando no requiere pago y es SINPE, solo actualiza estado en src/app/tours/[slug]/reservar/page.tsx y no navega a confirmación.
+Para tarjeta sí navega a pantalla final.
+Impacto: cierre de flujo menos claro para el usuario SINPE.
+Preguntas/Asunciones
+
+Asumo que ONVO sí ofrece firma de webhook; si no, habría que definir otra estrategia de autenticación del callback.
+Asumo que quieres que SINPE tenga aprobación operativa dentro del sistema (no solo proceso manual externo).
+No ejecuté pruebas de carga ni pruebas E2E; esta revisión es estática de código y flujo.
+Resumen corto
+El checkout está funcional en happy path de tarjeta, pero tiene tres riesgos fuertes: autenticación de webhook, cierre incompleto de SINPE y posible desalineación de fechas por timezone. Además, hay oportunidades claras de eficiencia y robustez en concurrencia y en protección del upload.

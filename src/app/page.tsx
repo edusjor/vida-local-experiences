@@ -478,16 +478,18 @@ export default async function Home() {
             </article>
 
             <article className="rounded-2xl border border-white/20 bg-white/10 p-6 backdrop-blur-sm">
-              <h3 className="text-2xl font-extrabold">Prefieres atencion guiada</h3>
+              <h3 className="text-2xl font-extrabold">Contactanos por WhatsApp</h3>
               <p className="mt-3 text-emerald-50">
-                Te orientamos segun tu presupuesto, tipo de experiencia y tiempo disponible para que reserves con confianza.
+                Escribenos al +506 6015 9782 y te ayudamos a elegir tour, fechas y metodo de pago en minutos.
               </p>
-              <Link
-                href="/contacto"
+              <a
+                href="https://wa.me/50660159782"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="mt-5 inline-block rounded-lg bg-amber-400 px-5 py-2 text-sm font-extrabold text-slate-900 transition hover:bg-amber-300"
               >
-                Ir al centro de contacto
-              </Link>
+                Abrir WhatsApp
+              </a>
             </article>
           </div>
         </div>

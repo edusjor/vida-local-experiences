@@ -1,21 +1,32 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { finalizeReservationPayment } from '../../../lib/reservationPayment';
 
-function findStringValue(input: unknown, candidateKeys: string[]): string {
-  if (!input || typeof input !== 'object') return '';
+type OnvoWebhookBody = {
+  type?: unknown;
+  data?: {
+    id?: unknown;
+    paymentIntentId?: unknown;
+  } | null;
+};
 
-  const source = input as Record<string, unknown>;
-  for (const key of candidateKeys) {
-    const value = source[key];
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
-    }
-  }
+function getWebhookSecretFromHeaders(req: NextApiRequest): string {
+  const headerValue = req.headers['x-webhook-secret'];
+  if (Array.isArray(headerValue)) return String(headerValue[0] ?? '').trim();
+  return String(headerValue ?? '').trim();
+}
 
-  for (const value of Object.values(source)) {
-    const nested = findStringValue(value, candidateKeys);
-    if (nested) return nested;
-  }
+function getPaymentIntentIdFromEvent(body: OnvoWebhookBody): string {
+  const eventType = String(body.type ?? '').trim();
+  if (eventType !== 'payment-intent.succeeded') return '';
+
+  const source = body.data;
+  if (!source || typeof source !== 'object') return '';
+
+  const directId = String(source.id ?? '').trim();
+  if (directId) return directId;
+
+  const fallbackId = String(source.paymentIntentId ?? '').trim();
+  if (fallbackId) return fallbackId;
 
   return '';
 }
@@ -25,7 +36,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Metodo no permitido' });
   }
 
-  const paymentIntentId = findStringValue(req.body, ['paymentIntentId', 'payment_intent_id', 'id', 'paymentIntent']);
+  const expectedWebhookSecret = String(process.env.ONVO_WEBHOOK_SECRET ?? '').trim();
+  const webhookSecretFromRequest = getWebhookSecretFromHeaders(req);
+
+  if (!expectedWebhookSecret) {
+    return res.status(500).json({ error: 'Webhook de ONVO no configurado' });
+  }
+
+  if (!webhookSecretFromRequest || webhookSecretFromRequest !== expectedWebhookSecret) {
+    return res.status(401).json({ error: 'Webhook no autorizado' });
+  }
+
+  const body = (req.body && typeof req.body === 'object' ? req.body : {}) as OnvoWebhookBody;
+  const paymentIntentId = getPaymentIntentIdFromEvent(body);
   if (!paymentIntentId) {
     return res.status(200).json({ ok: true, ignored: true });
   }

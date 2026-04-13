@@ -375,10 +375,14 @@ export default function TourDetailPage() {
   }, [sortedAvailability, todayDateKey]);
 
   const nextAvailableDateLabel = useMemo(() => {
+    if (calendarHasOpenAvailability) {
+      return new Date(`${todayDateKey}T00:00:00`).toLocaleDateString();
+    }
+
     const firstFutureDateKey = availableDateKeys[0];
     if (!firstFutureDateKey) return "Sin fechas disponibles por ahora";
     return new Date(`${firstFutureDateKey}T00:00:00`).toLocaleDateString();
-  }, [availableDateKeys]);
+  }, [availableDateKeys, calendarHasOpenAvailability, todayDateKey]);
 
   const availableDateSet = useMemo(() => new Set(availableDateKeys), [availableDateKeys]);
 
@@ -657,7 +661,7 @@ export default function TourDetailPage() {
             <h2 className="text-2xl font-extrabold text-slate-900">Detalles generales</h2>
             <p className="mt-3 whitespace-pre-line leading-relaxed text-slate-700">{tour.description}</p>
 
-            {(getDurationLabel(tour.durationDays) !== "A confirmar" || tour.guideType || tour.transport || tour.groups || [tour.zone, tour.country].filter(Boolean).length > 0 || tour.departurePoint || sortedAvailability.length > 0) && (
+            {(getDurationLabel(tour.durationDays) !== "A confirmar" || tour.guideType || tour.transport || tour.groups || [tour.zone, tour.country].filter(Boolean).length > 0 || tour.departurePoint || hasCalendarAvailability) && (
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 {getDurationLabel(tour.durationDays) !== "A confirmar" && (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -695,7 +699,7 @@ export default function TourDetailPage() {
                     <p className="mt-1 text-sm font-semibold text-slate-900">{tour.departurePoint}</p>
                   </div>
                 )}
-                {sortedAvailability.length > 0 && (
+                {hasCalendarAvailability && (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:col-span-2">
                     <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Proxima fecha</p>
                     <p className="mt-1 text-sm font-semibold text-slate-900">{nextAvailableDateLabel}</p>
