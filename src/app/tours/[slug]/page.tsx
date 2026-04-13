@@ -81,6 +81,16 @@ function getBasePriceOption(options: TourPriceOption[]): TourPriceOption | null 
   return options.find((option) => option.isBase) || null;
 }
 
+function getPrimaryPackageId(packages: TourPackage[] | undefined): string | null {
+  if (!Array.isArray(packages) || packages.length === 0) return null;
+
+  for (const pkg of packages) {
+    if (pkg.priceOptions.some((option) => option.isBase)) return pkg.id;
+  }
+
+  return packages[0].id;
+}
+
 function hasReservablePricing(raw: Partial<Tour>): boolean {
   const hasPackages = Array.isArray(raw.tourPackages)
     && raw.tourPackages.some((pkg) => Array.isArray(pkg.priceOptions) && pkg.priceOptions.length > 0);
@@ -357,7 +367,10 @@ export default function TourDetailPage() {
 
   const selectedPackage = useMemo(() => {
     if (!tour?.tourPackages?.length) return null;
-    return tour.tourPackages.find((pkg) => pkg.id === selectedPackageId) || tour.tourPackages[0] || null;
+    return tour.tourPackages.find((pkg) => pkg.id === selectedPackageId)
+      || tour.tourPackages.find((pkg) => pkg.id === getPrimaryPackageId(tour.tourPackages))
+      || tour.tourPackages[0]
+      || null;
   }, [tour?.tourPackages, selectedPackageId]);
 
   const activePriceOptions = selectedPackage?.priceOptions || [];
@@ -440,7 +453,7 @@ export default function TourDetailPage() {
 
     const exists = tour.tourPackages.some((pkg) => pkg.id === selectedPackageId);
     if (!exists) {
-      setSelectedPackageId(tour.tourPackages[0].id);
+      setSelectedPackageId(getPrimaryPackageId(tour.tourPackages));
     }
   }, [tour?.tourPackages, selectedPackageId]);
 

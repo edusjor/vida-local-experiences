@@ -23,6 +23,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ ok: false });
     }
 
+    // Renovar sesion mientras el admin siga activo
+    if (session.username) {
+      setAdminSessionCookie(res, createAdminSessionToken(session.username));
+    }
+
     return res.status(200).json({ ok: true, username: session.username });
   }
 

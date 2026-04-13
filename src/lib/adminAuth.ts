@@ -136,7 +136,13 @@ export function requireAdminSession(req: NextApiRequest, res: NextApiResponse): 
   }
 
   const session = getAdminSessionFromRequest(req);
-  if (session.ok) return true;
+  if (session.ok) {
+    // Renovar sesion en cada peticion autenticada (ventana deslizante)
+    if (session.username) {
+      setAdminSessionCookie(res, createAdminSessionToken(session.username));
+    }
+    return true;
+  }
   res.status(401).json({ error: 'No autorizado' });
   return false;
 }

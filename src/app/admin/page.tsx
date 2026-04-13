@@ -490,11 +490,35 @@ function createEmptyTourPackage(defaultTitle = ""): TourPackageEditor {
   };
 }
 
-function ensureSingleBaseOption(items: PriceOptionEditor[]): PriceOptionEditor[] {
+function ensureSingleBaseAcrossEditorPackages(items: TourPackageEditor[]): TourPackageEditor[] {
   if (!items.length) return items;
-  const firstBaseIndex = items.findIndex((item) => item.isBase);
-  const normalizedBaseIndex = firstBaseIndex === -1 ? 0 : firstBaseIndex;
-  return items.map((item, index) => ({ ...item, isBase: index === normalizedBaseIndex }));
+
+  let basePackageIndex = -1;
+  let baseOptionIndex = -1;
+
+  for (let pkgIndex = 0; pkgIndex < items.length; pkgIndex += 1) {
+    const optionIndex = items[pkgIndex].priceOptions.findIndex((option) => option.isBase);
+    if (optionIndex !== -1) {
+      basePackageIndex = pkgIndex;
+      baseOptionIndex = optionIndex;
+      break;
+    }
+  }
+
+  if (basePackageIndex === -1) {
+    const firstPackageWithOptionsIndex = items.findIndex((pkg) => pkg.priceOptions.length > 0);
+    if (firstPackageWithOptionsIndex === -1) return items;
+    basePackageIndex = firstPackageWithOptionsIndex;
+    baseOptionIndex = 0;
+  }
+
+  return items.map((pkg, pkgIndex) => ({
+    ...pkg,
+    priceOptions: pkg.priceOptions.map((option, optionIndex) => ({
+      ...option,
+      isBase: pkgIndex === basePackageIndex && optionIndex === baseOptionIndex,
+    })),
+  }));
 }
 
 function buildEditorTourPackages(items: unknown, legacyPriceOptions?: unknown, legacyPrice?: number): TourPackageEditor[] {
@@ -511,7 +535,7 @@ function buildEditorTourPackages(items: unknown, legacyPriceOptions?: unknown, l
       const id = String(source?.id ?? `pkg-${index}-${Date.now()}`).trim() || `pkg-${index}-${Date.now()}`;
       const title = String(source?.title ?? "").trim();
       const description = String(source?.description ?? "").trim();
-      const options = ensureSingleBaseOption(buildEditorPriceOptions(source?.priceOptions));
+      const options = buildEditorPriceOptions(source?.priceOptions);
 
       return {
         id,
@@ -523,7 +547,7 @@ function buildEditorTourPackages(items: unknown, legacyPriceOptions?: unknown, l
     .filter((pkg) => pkg.title.length > 0 || pkg.priceOptions.some((option) => option.name.length > 0))
     : [];
 
-  if (normalizedFromPackages.length > 0) return normalizedFromPackages;
+  if (normalizedFromPackages.length > 0) return ensureSingleBaseAcrossEditorPackages(normalizedFromPackages);
 
   const legacyOptions = preparePriceOptionsForPayload(buildEditorPriceOptions(legacyPriceOptions));
   if (legacyOptions.length > 0) {
@@ -575,23 +599,24 @@ function preparePriceOptionsForPayload(items: PriceOptionEditor[]): Array<{ id: 
       price: item.isFree ? 0 : roundPriceToTwo(item.price as number),
     }));
 
-  const firstBaseIndex = preparedRaw.findIndex((item) => item.isBase);
-  const normalizedBaseIndex = firstBaseIndex === -1 && preparedRaw.length > 0 ? 0 : firstBaseIndex;
-  return preparedRaw.map((item, index) => ({
-    ...item,
-    isBase: normalizedBaseIndex !== -1 && index === normalizedBaseIndex,
-  }));
+  return preparedRaw;
 }
 
 function getPrimaryPriceFromPackages(
   items: Array<{ priceOptions: Array<{ price: number; isFree: boolean; isBase: boolean }> }>,
   fallbackPrice = 0,
 ): number {
-  const firstPackage = items[0];
-  if (!firstPackage || !firstPackage.priceOptions.length) return fallbackPrice;
-  const baseOption = firstPackage.priceOptions.find((option) => option.isBase) || firstPackage.priceOptions[0];
-  if (!baseOption) return fallbackPrice;
-  return baseOption.isFree ? 0 : baseOption.price;
+  for (const pkg of items) {
+    const baseOption = pkg.priceOptions.find((option) => option.isBase);
+    if (baseOption) return baseOption.isFree ? 0 : baseOption.price;
+  }
+
+  const firstPackageWithOptions = items.find((pkg) => pkg.priceOptions.length > 0);
+  if (!firstPackageWithOptions) return fallbackPrice;
+
+  const fallbackOption = firstPackageWithOptions.priceOptions[0];
+  if (!fallbackOption) return fallbackPrice;
+  return fallbackOption.isFree ? 0 : fallbackOption.price;
 }
 
 function safeParse<T>(value: string | null, fallback: T): T {
@@ -970,7 +995,9 @@ function AdminPageContent() {
   const [transport, setTransport] = useState("");
   const [groups, setGroups] = useState("");
   const [storyText, setStoryText] = useState("");
-  const [tourPackages, setTourPackages] = useState<TourPackageEditor[]>([createEmptyTourPackage("Paquete principal")]);
+  const [tourPackages, setTourPackages] = useState<TourPackageEditor[]>(() =>
+    ensureSingleBaseAcrossEditorPackages([createEmptyTourPackage("Paquete principal")]),
+  );
   const [packageOpenMode, setPackageOpenMode] = useState<"multiple" | "single">("multiple");
   const [openPackageIds, setOpenPackageIds] = useState<string[]>([]);
   const [includedText, setIncludedText] = useState("");
@@ -1084,7 +1111,7 @@ function AdminPageContent() {
     transport: "",
     groups: "",
     storyText: "",
-    tourPackages: [createEmptyTourPackage("Paquete principal")],
+    tourPackages: ensureSingleBaseAcrossEditorPackages([createEmptyTourPackage("Paquete principal")]),
     includedText: "",
     recommendationsText: "",
     faqsList: [],
@@ -1113,7 +1140,7 @@ function AdminPageContent() {
     setTransport(state.transport);
     setGroups(state.groups);
     setStoryText(state.storyText);
-    setTourPackages(state.tourPackages);
+    setTourPackages(ensureSingleBaseAcrossEditorPackages(state.tourPackages));
     setOpenPackageIds(state.tourPackages.map((pkg) => pkg.id));
     setIncludedText(state.includedText);
     setRecommendationsText(state.recommendationsText);
@@ -1486,7 +1513,7 @@ function AdminPageContent() {
     setGroups("");
     setStoryText("");
     const defaultPackage = createEmptyTourPackage("Paquete principal");
-    setTourPackages([defaultPackage]);
+    setTourPackages(ensureSingleBaseAcrossEditorPackages([defaultPackage]));
     setOpenPackageIds([defaultPackage.id]);
     setPackageOpenMode("multiple");
     setIncludedText("");
@@ -1515,7 +1542,7 @@ function AdminPageContent() {
 
   const handleAddTourPackage = () => {
     const nextPackage = createEmptyTourPackage();
-    setTourPackages((prev) => [...prev, nextPackage]);
+    setTourPackages((prev) => ensureSingleBaseAcrossEditorPackages([...prev, nextPackage]));
     setOpenPackageIds((prev) => {
       if (packageOpenMode === "single") return [nextPackage.id];
       return [...prev, nextPackage.id];
@@ -1523,7 +1550,7 @@ function AdminPageContent() {
   };
 
   const handleRemoveTourPackage = (packageId: string) => {
-    setTourPackages((prev) => prev.filter((pkg) => pkg.id !== packageId));
+    setTourPackages((prev) => ensureSingleBaseAcrossEditorPackages(prev.filter((pkg) => pkg.id !== packageId)));
     setOpenPackageIds((prev) => prev.filter((id) => id !== packageId));
   };
 
@@ -1581,10 +1608,12 @@ function AdminPageContent() {
   const handlePackageSetPriceOptionAsBase = (packageId: string, optionId: string) => {
     setTourPackages((prev) =>
       prev.map((pkg) => {
-        if (pkg.id !== packageId) return pkg;
         return {
           ...pkg,
-          priceOptions: pkg.priceOptions.map((option) => ({ ...option, isBase: option.id === optionId })),
+          priceOptions: pkg.priceOptions.map((option) => ({
+            ...option,
+            isBase: pkg.id === packageId && option.id === optionId,
+          })),
         };
       }),
     );
@@ -1604,11 +1633,11 @@ function AdminPageContent() {
   const handlePackageRemoveCustomPriceOption = (packageId: string, optionId: string) => {
     if (!optionId.startsWith("custom-")) return;
     setTourPackages((prev) =>
-      prev.map((pkg) =>
+      ensureSingleBaseAcrossEditorPackages(prev.map((pkg) =>
         pkg.id === packageId
           ? { ...pkg, priceOptions: pkg.priceOptions.filter((option) => option.id !== optionId) }
           : pkg,
-      ),
+      )),
     );
   };
 
@@ -1999,7 +2028,9 @@ function AdminPageContent() {
     const category = categories.find((c) => c.id === categoryId);
     const payloadCategory = category ? { id: category.id, name: category.name } : { id: 0, name: "Sin categoria" };
 
-    const preparedTourPackages = tourPackages
+    const normalizedTourPackages = ensureSingleBaseAcrossEditorPackages(tourPackages);
+
+    const preparedTourPackages = normalizedTourPackages
       .map((pkg) => ({
         id: String(pkg.id || "").trim(),
         title: pkg.title.trim(),
@@ -3235,7 +3266,7 @@ function AdminPageContent() {
                                     <label className="flex items-center gap-2 rounded-lg bg-emerald-100/60 px-3 py-2 text-xs font-semibold text-emerald-700">
                                       <input
                                         type="radio"
-                                        name={`base-price-option-${pkg.id}`}
+                                        name="base-price-option-global"
                                         checked={option.isBase}
                                         onChange={() => handlePackageSetPriceOptionAsBase(pkg.id, option.id)}
                                       />

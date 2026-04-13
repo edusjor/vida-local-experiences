@@ -198,9 +198,27 @@ function hasReservablePricing(tour: Tour): boolean {
 }
 
 function getEffectiveTourPrice(tour: Tour): number {
-  const allPrices = getReservableOptionPrices(tour);
-  if (allPrices.length === 0) return tour.price;
-  return Math.min(...allPrices);
+  if (Array.isArray(tour.tourPackages)) {
+    for (const pkg of tour.tourPackages) {
+      const baseOption = Array.isArray(pkg.priceOptions)
+        ? pkg.priceOptions.find((option) => option.isBase)
+        : null;
+      if (baseOption) return normalizeOptionPrice(baseOption);
+    }
+
+    const firstPackageWithOptions = tour.tourPackages.find((pkg) => Array.isArray(pkg.priceOptions) && pkg.priceOptions.length > 0);
+    if (firstPackageWithOptions?.priceOptions?.[0]) {
+      return normalizeOptionPrice(firstPackageWithOptions.priceOptions[0]);
+    }
+  }
+
+  const legacyBase = getBasePriceOption(tour.priceOptions);
+  if (legacyBase) return normalizeOptionPrice(legacyBase);
+  if (Array.isArray(tour.priceOptions) && tour.priceOptions[0]) {
+    return normalizeOptionPrice(tour.priceOptions[0]);
+  }
+
+  return tour.price;
 }
 
 function getTourPriceLabel(tour: Tour): string | null {

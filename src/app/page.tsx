@@ -170,6 +170,53 @@ function hasTourPricing(tour: {
   return typeof tour.price === "number" && Number.isFinite(tour.price) && tour.price > 0;
 }
 
+function getFeaturedPrincipalPrice(tour: {
+  price?: number | null;
+  tourPackages?: unknown;
+  priceOptions?: unknown;
+}): number | null {
+  const packageList = Array.isArray(tour.tourPackages)
+    ? (tour.tourPackages as Array<{ priceOptions?: Array<{ price?: unknown; isFree?: unknown; isBase?: unknown }> }> )
+    : [];
+
+  for (const pkg of packageList) {
+    const options = Array.isArray(pkg.priceOptions) ? pkg.priceOptions : [];
+    const base = options.find((option) => Boolean(option?.isBase));
+    if (base) {
+      if (Boolean(base.isFree)) return 0;
+      const parsed = Number(base.price);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+
+  const firstPackageWithOptions = packageList.find((pkg) => Array.isArray(pkg.priceOptions) && pkg.priceOptions.length > 0);
+  const firstPackageOption = firstPackageWithOptions?.priceOptions?.[0];
+  if (firstPackageOption) {
+    if (Boolean(firstPackageOption.isFree)) return 0;
+    const parsed = Number(firstPackageOption.price);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  const legacyOptions = Array.isArray(tour.priceOptions)
+    ? (tour.priceOptions as Array<{ price?: unknown; isFree?: unknown; isBase?: unknown }>)
+    : [];
+  const legacyBase = legacyOptions.find((option) => Boolean(option?.isBase));
+  if (legacyBase) {
+    if (Boolean(legacyBase.isFree)) return 0;
+    const parsed = Number(legacyBase.price);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  if (legacyOptions[0]) {
+    if (Boolean(legacyOptions[0].isFree)) return 0;
+    const parsed = Number(legacyOptions[0].price);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  const fallback = typeof tour.price === "number" && Number.isFinite(tour.price) ? tour.price : null;
+  return fallback;
+}
+
 async function getProviderLogos(): Promise<Array<{ src: string; name: string }>> {
   try {
     const providersDir = path.join(process.cwd(), "uploads", "proveedores");
@@ -286,16 +333,19 @@ export default async function Home() {
       },
     });
 
-    featuredTours = featuredRaw.map((tour) => ({
-      id: tour.id,
-      title: tour.title,
-      image: Array.isArray(tour.images) && tour.images[0] ? tour.images[0] : TOUR_PLACEHOLDER_IMAGE,
-      description: String(tour.description ?? ""),
-      categoryName: String(tour.category?.name ?? "Tour"),
-      priceLabel: hasTourPricing(tour) ? buildFeaturedPriceLabel(tour.price) : null,
-      location: buildFeaturedLocation(tour.zone, tour.country),
-      featured: Boolean(tour.featured),
-    }));
+    featuredTours = featuredRaw.map((tour) => {
+      const principalPrice = getFeaturedPrincipalPrice(tour);
+      return {
+        id: tour.id,
+        title: tour.title,
+        image: Array.isArray(tour.images) && tour.images[0] ? tour.images[0] : TOUR_PLACEHOLDER_IMAGE,
+        description: String(tour.description ?? ""),
+        categoryName: String(tour.category?.name ?? "Tour"),
+        priceLabel: hasTourPricing(tour) && principalPrice !== null ? buildFeaturedPriceLabel(principalPrice) : null,
+        location: buildFeaturedLocation(tour.zone, tour.country),
+        featured: Boolean(tour.featured),
+      };
+    });
   } catch {
     featuredTours = [];
   }

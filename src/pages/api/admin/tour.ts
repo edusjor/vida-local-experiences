@@ -212,20 +212,16 @@ function normalizePriceOptionsInput(items: unknown): NormalizedPriceOption[] {
 
   if (!normalized.length) return [];
 
-  const baseIndex = normalized.findIndex((item) => item.isBase);
-  const normalizedBaseIndex = baseIndex === -1 ? 0 : baseIndex;
-
-  return normalized.map((item, index) => ({
+  return normalized.map((item) => ({
     ...item,
     price: item.isFree ? 0 : roundPriceToTwo(item.price),
-    isBase: index === normalizedBaseIndex,
   }));
 }
 
 function normalizeTourPackagesInput(items: unknown): NormalizedTourPackage[] {
   if (!Array.isArray(items)) return [];
 
-  return items
+  const normalizedPackages = items
     .map((item, pkgIndex) => {
       const source = item as { id?: unknown; title?: unknown; description?: unknown; priceOptions?: unknown };
       const id = String(source?.id ?? `package-${pkgIndex}`).trim() || `package-${pkgIndex}`;
@@ -241,14 +237,50 @@ function normalizeTourPackagesInput(items: unknown): NormalizedTourPackage[] {
       };
     })
     .filter((pkg) => pkg.title && pkg.priceOptions.length > 0);
+
+  if (!normalizedPackages.length) return normalizedPackages;
+
+  let basePackageIndex = -1;
+  let baseOptionIndex = -1;
+
+  for (let pkgIndex = 0; pkgIndex < normalizedPackages.length; pkgIndex += 1) {
+    const optionIndex = normalizedPackages[pkgIndex].priceOptions.findIndex((option) => option.isBase);
+    if (optionIndex !== -1) {
+      basePackageIndex = pkgIndex;
+      baseOptionIndex = optionIndex;
+      break;
+    }
+  }
+
+  if (basePackageIndex === -1) {
+    const firstPackageWithOptionsIndex = normalizedPackages.findIndex((pkg) => pkg.priceOptions.length > 0);
+    if (firstPackageWithOptionsIndex !== -1) {
+      basePackageIndex = firstPackageWithOptionsIndex;
+      baseOptionIndex = 0;
+    }
+  }
+
+  return normalizedPackages.map((pkg, pkgIndex) => ({
+    ...pkg,
+    priceOptions: pkg.priceOptions.map((option, optionIndex) => ({
+      ...option,
+      isBase: pkgIndex === basePackageIndex && optionIndex === baseOptionIndex,
+    })),
+  }));
 }
 
 function getPrimaryTourPriceFromPackages(items: NormalizedTourPackage[], fallbackPrice: number): number {
-  const firstPackage = items[0];
-  if (!firstPackage || !firstPackage.priceOptions.length) return fallbackPrice;
-  const baseOption = firstPackage.priceOptions.find((option) => option.isBase) || firstPackage.priceOptions[0];
-  if (!baseOption) return fallbackPrice;
-  return baseOption.isFree ? 0 : baseOption.price;
+  for (const pkg of items) {
+    const baseOption = pkg.priceOptions.find((option) => option.isBase);
+    if (baseOption) return baseOption.isFree ? 0 : baseOption.price;
+  }
+
+  const firstPackageWithOptions = items.find((pkg) => pkg.priceOptions.length > 0);
+  if (!firstPackageWithOptions) return fallbackPrice;
+
+  const fallbackOption = firstPackageWithOptions.priceOptions[0];
+  if (!fallbackOption) return fallbackPrice;
+  return fallbackOption.isFree ? 0 : fallbackOption.price;
 }
 
 async function resolveCategoryId(

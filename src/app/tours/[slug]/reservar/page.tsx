@@ -398,6 +398,16 @@ function buildNormalizedPackages(tour: { tourPackages?: unknown; priceOptions?: 
   return [];
 }
 
+function getPrimaryPackageId(packages: TourPackage[] | undefined): string | null {
+  if (!Array.isArray(packages) || packages.length === 0) return null;
+
+  for (const pkg of packages) {
+    if (pkg.priceOptions.some((option) => option.isBase)) return pkg.id;
+  }
+
+  return packages[0].id;
+}
+
 function slugifyTourValue(value: string): string {
   return value
     .trim()
@@ -594,12 +604,15 @@ function ReservarPageContent({
       }
     }
 
-    setSelectedPackageId(tour.tourPackages[0].id);
+    setSelectedPackageId(getPrimaryPackageId(tour.tourPackages));
   }, [packageFromQuery, selectedPackageId, tour]);
 
   const selectedPackage = useMemo(() => {
     if (!tour?.tourPackages?.length) return null;
-    return tour.tourPackages.find((pkg) => pkg.id === selectedPackageId) || tour.tourPackages[0] || null;
+    return tour.tourPackages.find((pkg) => pkg.id === selectedPackageId)
+      || tour.tourPackages.find((pkg) => pkg.id === getPrimaryPackageId(tour.tourPackages))
+      || tour.tourPackages[0]
+      || null;
   }, [selectedPackageId, tour]);
 
   const visiblePriceOptions = useMemo(() => {
