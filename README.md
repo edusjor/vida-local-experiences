@@ -35,3 +35,36 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 "# tours-sys" 
+
+## Deploy En VPS Con Docker
+
+### 1) Requisitos
+- Docker y Docker Compose instalados en el VPS.
+- Archivo `.env` con variables de produccion.
+
+### 2) Configurar Base De Datos Externa
+- Usa tu `DATABASE_URL` de Neon/RDS/etc en `.env`.
+- El archivo `docker-compose.vps.yml` esta preparado para DB externa (no levanta Postgres local).
+
+### 3) Levantar Servicios
+
+```bash
+docker compose -f docker-compose.vps.yml up -d --build
+```
+
+La app queda publicada en `http://TU_IP:3003`.
+
+### 4) Comandos Utiles
+
+```bash
+docker compose -f docker-compose.vps.yml logs -f app
+docker compose -f docker-compose.vps.yml restart app
+docker compose -f docker-compose.vps.yml down
+```
+
+### 5) Notas Importantes
+- `docker/entrypoint.sh` ejecuta por defecto:
+	- `prisma generate`
+	- `prisma migrate deploy`
+- `RUN_DB_PUSH` esta en `false` por defecto para evitar cambios no controlados en produccion.
+- `uploads` se monta como volumen bind (`./uploads:/app/uploads`) para conservar archivos entre despliegues.

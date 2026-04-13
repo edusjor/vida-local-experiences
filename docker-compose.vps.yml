@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tours-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      RUN_DB_GENERATE: "true"
+      RUN_DB_MIGRATIONS: "true"
+      RUN_DB_PUSH: "false"
+    ports:
+      - "3003:3003"
+    volumes:
+      - ./uploads:/app/uploads
