@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type SearchParams = {
   reserva?: string;
   estado?: string;
@@ -47,46 +49,46 @@ export default async function ReservaConfirmadaPage({
   return (
     <section className="mx-auto max-w-3xl px-4 py-10">
       <article
-        className={`rounded-2xl border p-6 shadow-sm ${
-          isPendingValidation ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"
+        className={`rounded-3xl border p-6 shadow-sm ${
+          isPendingValidation ? "border-[rgba(250,178,79,0.2)] bg-[#202630]/92" : "border-white/10 bg-[#202630]/92"
         }`}
       >
         <p
           className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
-            isPendingValidation ? "bg-amber-200 text-amber-900" : "bg-emerald-200 text-emerald-900"
+            isPendingValidation ? "bg-[var(--brand-gold)] text-[#11151c]" : "bg-[var(--brand-green)] text-white"
           }`}
         >
           {isPendingValidation ? "Pendiente de validacion" : "Confirmada"}
         </p>
 
-        <h1 className="mt-4 text-3xl font-black text-slate-900">{title}</h1>
-        <p className="mt-2 text-sm font-semibold text-slate-700">{subtitle}</p>
-        {shouldShowSummary ? <p className="mt-3 text-sm text-slate-700">{summary}</p> : null}
+        <h1 className="mt-4 text-3xl font-black text-white">{title}</h1>
+        <p className="mt-2 text-sm font-semibold text-slate-300">{subtitle}</p>
+        {shouldShowSummary ? <p className="mt-3 text-sm text-slate-300">{summary}</p> : null}
 
-        <div className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 sm:grid-cols-2">
+        <div className="mt-5 grid gap-3 rounded-2xl border border-white/10 bg-[#171c24] p-4 text-sm text-slate-300 sm:grid-cols-2">
           <p>
-            <span className="font-bold text-slate-900">Reserva:</span>{" "}
+            <span className="font-bold text-white">Reserva:</span>{" "}
             {reservationId ? `#${reservationId}` : "Por asignar"}
           </p>
           <p>
-            <span className="font-bold text-slate-900">Metodo de pago:</span>{" "}
+            <span className="font-bold text-white">Metodo de pago:</span>{" "}
             {paymentMethod || "No indicado"}
           </p>
         </div>
 
         <div className="mt-6 flex flex-wrap gap-2">
-          <a
+          <Link
             href="/tours"
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800"
+            className="rounded-full bg-[var(--brand-gold)] px-4 py-2 text-sm font-bold text-[#11151c] transition hover:brightness-105"
           >
-            Ver mas tours
-          </a>
-          <a
+            Ver experiencias
+          </Link>
+          <Link
             href="/"
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-400"
+            className="rounded-full border border-white/[0.15] bg-white/[0.08] px-4 py-2 text-sm font-bold text-white transition hover:bg-white/[0.12]"
           >
             Ir al inicio
-          </a>
+          </Link>
         </div>
       </article>
     </section>

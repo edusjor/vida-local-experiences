@@ -1,10 +1,8 @@
 import Link from "next/link";
-import path from "path";
-import { readdir } from "fs/promises";
 import FeaturedToursSlice from "./components/FeaturedToursSlice";
 import ContactUnifiedForm from "./components/ContactUnifiedForm";
-import ProvidersCarousel from "./components/ProvidersCarousel";
 import { prisma } from "../lib/prisma";
+import { siteConfig } from "../lib/siteConfig";
 
 type FeaturedTourView = {
   id: number;
@@ -33,29 +31,28 @@ type GooglePlaceReviewsData = {
 };
 
 const TOUR_PLACEHOLDER_IMAGE = "/tour-placeholder.svg";
-const GOOGLE_REVIEWS_URL = "https://maps.app.goo.gl/tqrezf2o6pirX9qx6";
-const GOOGLE_PLACE_DEFAULT_QUERY = "LINEA TOURS - Agencia de Viajes, Guapiles, Costa Rica";
-const PROVIDER_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".avif"]);
+const GOOGLE_REVIEWS_URL = siteConfig.googleReviewsUrl;
+const GOOGLE_PLACE_DEFAULT_QUERY = siteConfig.googlePlaceDefaultQuery;
 const HERO_SLIDES = [
   {
     src: "https://images.unsplash.com/photo-1580259679654-9276b39fd2d5?auto=format&fit=crop&w=2200&q=80",
-    alt: "Montanas y bosque tropical",
+    alt: "Mountains and tropical forest",
   },
   {
     src: "https://images.unsplash.com/photo-1552727131-5fc6af16796d?auto=format&fit=crop&w=2200&q=80",
-    alt: "Ave tropical sobre una rama",
+    alt: "Tropical bird on a branch",
   },
   {
     src: "https://images.unsplash.com/photo-1536709017021-ce8f99c17e38?auto=format&fit=crop&w=2200&q=80",
-    alt: "Costa con mar azul y vegetacion",
+    alt: "Coastline with blue ocean and lush vegetation",
   },
   {
     src: "https://images.unsplash.com/photo-1616890069499-f05321ca20fa?auto=format&fit=crop&w=2200&q=80",
-    alt: "Perezoso en un arbol",
+    alt: "Sloth on a tree",
   },
   {
     src: "https://images.unsplash.com/photo-1602190629358-31a50de315e4?auto=format&fit=crop&w=2200&q=80",
-    alt: "Atardecer en cuerpo de agua",
+    alt: "Sunset over water",
   },
 ] as const;
 
@@ -87,7 +84,7 @@ async function getGooglePlaceReviews(): Promise<GooglePlaceReviewsData | null> {
       },
       body: JSON.stringify({
         textQuery: query,
-        languageCode: "es",
+        languageCode: "en",
       }),
       next: {
         revalidate: 21600,
@@ -118,7 +115,7 @@ async function getGooglePlaceReviews(): Promise<GooglePlaceReviewsData | null> {
       ? place.reviews
           .slice(0, 6)
           .map((review) => ({
-            authorName: String(review.authorAttribution?.displayName ?? "Usuario de Google").trim() || "Usuario de Google",
+            authorName: String(review.authorAttribution?.displayName ?? "Google user").trim() || "Google user",
             rating: Number.isFinite(review.rating) ? Number(review.rating) : 0,
             text: String(review.text?.text ?? "").trim(),
             relativeDate: formatRelativeDate(review.relativePublishTimeDescription),
@@ -147,7 +144,7 @@ function buildFeaturedLocation(zone?: string | null, country?: string | null): s
 
 function buildFeaturedPriceLabel(price?: number | null): string {
   const numeric = typeof price === "number" && Number.isFinite(price) ? price : 0;
-  if (numeric === 0) return "Gratis";
+  if (numeric === 0) return "Free";
   return `$${numeric.toFixed(2)}`;
 }
 
@@ -215,25 +212,6 @@ function getFeaturedPrincipalPrice(tour: {
 
   const fallback = typeof tour.price === "number" && Number.isFinite(tour.price) ? tour.price : null;
   return fallback;
-}
-
-async function getProviderLogos(): Promise<Array<{ src: string; name: string }>> {
-  try {
-    const providersDir = path.join(process.cwd(), "uploads", "proveedores");
-    const entries = await readdir(providersDir, { withFileTypes: true });
-
-    return entries
-      .filter((entry) => entry.isFile())
-      .map((entry) => entry.name)
-      .filter((fileName) => PROVIDER_EXTENSIONS.has(path.extname(fileName).toLowerCase()))
-      .sort((a, b) => a.localeCompare(b, "es"))
-      .map((fileName) => ({
-        src: `/uploads/proveedores/${encodeURIComponent(fileName)}`,
-        name: path.parse(fileName).name.replace(/[-_]+/g, " ").trim() || "Proveedor",
-      }));
-  } catch {
-    return [];
-  }
 }
 
 function IconWrap({ children }: { children: React.ReactNode }) {
@@ -308,7 +286,6 @@ function SparkIcon() {
 export default async function Home() {
   let featuredTours: FeaturedTourView[] = [];
   const googlePlaceReviews = await getGooglePlaceReviews();
-  const providerLogos = await getProviderLogos();
 
   try {
     const featuredRaw = await prisma.tour.findMany({
@@ -367,117 +344,137 @@ export default async function Home() {
           <div className="hero-overlay" />
         </div>
         <div className="relative z-10 mx-auto max-w-6xl px-4 py-24 text-white md:py-32">
-          <p className="mb-3 inline-block rounded-full border border-white/40 bg-white/10 px-4 py-1 text-sm font-semibold uppercase tracking-wide">
-            Guapiles Linea Tours
+          <p className="mb-3 inline-block rounded-full border border-white/20 bg-white/10 px-4 py-1 text-sm font-semibold uppercase tracking-[0.22em] text-white/90">
+            {siteConfig.brandName}
           </p>
-          <h1 className="script-title text-5xl leading-tight drop-shadow-md md:text-7xl">Descubre el turismo rural costarricense</h1>
-          <p className="mt-5 max-w-2xl text-lg font-semibold text-slate-100 md:text-2xl">
-            Experiencias unicas y autenticas dentro y fuera del pais para todos los estilos de vida.
+          <h1 className="script-title max-w-4xl text-5xl leading-tight drop-shadow-md md:text-7xl">{siteConfig.tagline}</h1>
+          <p className="mt-5 max-w-3xl text-lg font-semibold text-slate-100 md:text-2xl">
+            {siteConfig.heroSubtitle}
+          </p>
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-300 md:text-base">
+            We connect travelers with the nature, culture, and people that make Costa Rica's Pacific coast unique. Every experience is crafted with intention, close support, and real local knowledge.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
               href="/tours"
-              className="rounded-lg bg-emerald-600 px-8 py-3 text-center text-lg font-extrabold shadow-xl shadow-emerald-950/25 transition hover:bg-emerald-500"
+              className="rounded-full bg-[var(--brand-gold)] px-8 py-3 text-center text-lg font-extrabold text-[#11151c] shadow-xl shadow-black/25 transition hover:brightness-105"
             >
-              Ver tours
+              Explore experiences
             </Link>
             <Link
               href="/contacto"
-              className="rounded-lg bg-amber-400 px-8 py-3 text-center text-lg font-extrabold text-slate-900 shadow-xl shadow-amber-950/25 transition hover:bg-amber-300"
+              className="rounded-full border border-white/20 bg-white/[0.08] px-8 py-3 text-center text-lg font-extrabold text-white shadow-xl shadow-black/20 transition hover:bg-white/[0.12]"
             >
-              Explorar planes
+              Plan my trip
             </Link>
           </div>
         </div>
       </section>
-
       <section className="section-band">
-        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 md:grid-cols-2 md:items-center">
+        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-14 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
           <div>
-            <h2 className="text-3xl font-extrabold text-emerald-900 md:text-4xl">Turismo rural, local e internacional</h2>
-            <p className="mt-4 text-lg leading-relaxed text-slate-700">
-              Trabajamos junto a familias, emprendedores y comunidades locales para crear experiencias seguras y de alta calidad.
-              Tambien ofrecemos circuitos internacionales con acompanamiento cercano de principio a fin.
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--brand-gold)]">Private, locally led</p>
+            <h2 className="mt-3 text-3xl font-extrabold text-white md:text-4xl">Built for nature and real connection</h2>
+            <p className="mt-4 text-lg leading-relaxed text-slate-300">
+              We don't sell generic tours. We create private, authentic experiences that connect every traveler with Costa Rica's nature, culture, and local people.
             </p>
-            <div className="mt-6 grid gap-3 text-sm font-semibold text-emerald-900 sm:grid-cols-2">
-              <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-sm">
+            <p className="mt-4 text-base leading-relaxed text-slate-400">
+              Our approach is rooted in Manuel Antonio, Dominical, and Uvita, and powered by local hosts who open the door to more human, intentional, and memorable experiences.
+            </p>
+            <div className="mt-6 grid gap-3 text-sm font-semibold text-white sm:grid-cols-2">
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#202630]/92 px-3 py-3 shadow-sm">
                 <IconWrap>
                   <GlobeIcon />
                 </IconWrap>
-                Experiencias nacionales e internacionales
+                Private experiences at your pace
               </div>
-              <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-sm">
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#202630]/92 px-3 py-3 shadow-sm">
                 <IconWrap>
                   <SparkIcon />
                 </IconWrap>
-                Mas de 35 aliados turisticos
+                Guided by real local knowledge
               </div>
-              <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-sm sm:col-span-2">
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[#202630]/92 px-3 py-3 shadow-sm sm:col-span-2">
                 <IconWrap>
                   <ShieldIcon />
                 </IconWrap>
-                Atencion cercana y personalizada en cada etapa del viaje
+                Nature, culture, and community in one experience
               </div>
             </div>
           </div>
-          <img
-            src="https://images.unsplash.com/photo-1659120409178-afa7c3630bb4?auto=format&fit=crop&w=1000&q=80"
-            alt="Guia local de turismo"
-            className="h-72 w-full rounded-2xl object-cover shadow-xl"
-          />
+          <div className="rounded-[32px] border border-white/10 bg-[#202630]/92 p-3 shadow-2xl shadow-black/25">
+            <img
+              src="https://images.unsplash.com/photo-1509233725247-49e657c54213?auto=format&fit=crop&w=1200&q=80"
+              alt="Costa Rica Pacific coast"
+              className="h-72 w-full rounded-[24px] object-cover"
+            />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-[#171c24] p-4">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--brand-gold)]">Local base</p>
+                <p className="mt-2 text-lg font-extrabold text-white">Manuel Antonio, Dominical, and Uvita</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-[#171c24] p-4">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--brand-gold)]">Focus</p>
+                <p className="mt-2 text-lg font-extrabold text-white">Private and authentic experiences</p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       {featuredTours.length > 0 && (
         <section className="jungle-band py-12 text-white">
           <div className="mx-auto max-w-6xl px-4">
-            <h2 className="text-center text-3xl font-extrabold">Tours destacados</h2>
+            <p className="text-center text-xs font-black uppercase tracking-[0.24em] text-[var(--brand-gold)]">Explore Our Experiences</p>
+            <h2 className="mt-3 text-center text-3xl font-extrabold">Experiences designed for real connection</h2>
+            <p className="mx-auto mt-3 max-w-3xl text-center text-sm text-slate-200 md:text-base">
+              We curate experiences with local hosts, a more natural pace, and settings that let you live Costa Rica beyond standard tourism.
+            </p>
             <FeaturedToursSlice tours={featuredTours} />
           </div>
         </section>
       )}
 
-      <section className="bg-white py-12">
+      <section className="section-band py-12">
         <div className="mx-auto max-w-6xl px-4">
-          <h2 className="text-center text-4xl font-extrabold text-emerald-900">Por que elegir Guapiles Linea Tours</h2>
+          <p className="text-center text-xs font-black uppercase tracking-[0.24em] text-[var(--brand-gold)]">Why Choose Vida Local Experiences</p>
+          <h2 className="mt-3 text-center text-4xl font-extrabold text-white">Why travel with {siteConfig.brandName}</h2>
           <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { title: "Turismo responsable", desc: "Viajes que aportan a comunidades y tradiciones locales", icon: <GlobeIcon /> },
-              { title: "Calidad y seguridad", desc: "Operadores confiables y experiencias bien coordinadas", icon: <ShieldIcon /> },
-              { title: "Destinos variados", desc: "Naturaleza, playa y ciudad en una sola propuesta", icon: <MapPinIcon /> },
-              { title: "Acompanamiento real", desc: "Atencion personalizada antes, durante y despues del viaje", icon: <PhoneIcon /> },
+              { title: "Local authenticity", desc: "Experiences created with people who truly know and love the place they call home.", icon: <GlobeIcon /> },
+              { title: "Truly private", desc: "No mixed groups or fixed external rhythms: each experience is shaped around your trip.", icon: <ShieldIcon /> },
+              { title: "Respect for nature", desc: "Every experience is designed to care for the territory and follow the natural rhythm of the coast.", icon: <MapPinIcon /> },
+              { title: "Memorable moments", desc: "We create encounters, flavors, and landscapes that stay with you long after you return.", icon: <PhoneIcon /> },
             ].map((item) => (
-              <div key={item.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+              <div key={item.title} className="rounded-3xl border border-white/10 bg-[#202630]/92 p-5 shadow-sm">
                 <div className="mb-3">
                   <IconWrap>{item.icon}</IconWrap>
                 </div>
-                <p className="text-xl font-extrabold text-emerald-900">{item.title}</p>
-                <p className="mt-2 text-slate-600">{item.desc}</p>
+                <p className="text-xl font-extrabold text-white">{item.title}</p>
+                <p className="mt-2 text-slate-300">{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {providerLogos.length > 0 ? <ProvidersCarousel logos={providerLogos} /> : null}
-
       <section className="section-band py-12">
         <div className="mx-auto max-w-6xl px-4">
-          <div className="rounded-2xl border border-emerald-100 bg-white p-6 shadow-sm">
+          <div className="rounded-3xl border border-white/10 bg-[#202630]/92 p-6 shadow-sm">
             <div>
-              <p className="text-sm font-extrabold uppercase tracking-wide text-emerald-700">Opiniones de Google</p>
-              <h2 className="mt-2 text-3xl font-extrabold text-emerald-900">Conoce lo que dicen nuestros viajeros</h2>
+              <p className="text-sm font-extrabold uppercase tracking-wide text-[var(--brand-gold)]">Google Reviews</p>
+              <h2 className="mt-2 text-3xl font-extrabold text-white">See what our travelers say</h2>
               {googlePlaceReviews ? (
                 <>
-                  <p className="mt-3 text-slate-700">
-                    Calificacion promedio {ratingAsText(googlePlaceReviews.rating)}/5 basada en {googlePlaceReviews.totalRatings} opiniones para {googlePlaceReviews.placeName}.
+                  <p className="mt-3 text-slate-300">
+                    Average rating {ratingAsText(googlePlaceReviews.rating)}/5 based on {googlePlaceReviews.totalRatings} reviews for {googlePlaceReviews.placeName}.
                   </p>
                   <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {googlePlaceReviews.reviews.map((review, index) => (
-                      <article key={`${review.authorName}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                        <p className="text-sm font-extrabold text-emerald-900">{review.authorName}</p>
-                        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-amber-700">{ratingAsText(review.rating)}/5</p>
-                        <p className="mt-3 line-clamp-5 text-sm leading-relaxed text-slate-700">{review.text}</p>
+                      <article key={`${review.authorName}-${index}`} className="rounded-2xl border border-white/10 bg-[#171c24] p-4 shadow-sm">
+                        <p className="text-sm font-extrabold text-white">{review.authorName}</p>
+                        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[var(--brand-gold)]">{ratingAsText(review.rating)}/5</p>
+                        <p className="mt-3 line-clamp-5 text-sm leading-relaxed text-slate-300">{review.text}</p>
                         {review.relativeDate ? <p className="mt-3 text-xs font-semibold text-slate-500">{review.relativeDate}</p> : null}
                       </article>
                     ))}
@@ -487,24 +484,24 @@ export default async function Home() {
                       href={googlePlaceReviews.mapsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-block rounded-lg bg-emerald-600 px-5 py-3 text-sm font-extrabold text-white transition hover:bg-emerald-500"
+                      className="inline-block rounded-full bg-[var(--brand-gold)] px-5 py-3 text-sm font-extrabold text-[#11151c] transition hover:brightness-105"
                     >
-                      Ver mas opiniones en Google
+                      View more reviews on Google
                     </Link>
                   </div>
                 </>
               ) : (
                 <>
-                  <p className="mt-3 text-slate-700">
-                    Para mostrar resenas automaticas en esta pagina, agrega GOOGLE_PLACES_API_KEY en el entorno del servidor.
+                  <p className="mt-3 text-slate-300">
+                    To display automatic reviews on this page, add GOOGLE_PLACES_API_KEY in the server environment.
                   </p>
                   <Link
                     href={GOOGLE_REVIEWS_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-5 inline-block rounded-lg border border-emerald-300 bg-white px-5 py-3 text-sm font-extrabold text-emerald-700 transition hover:bg-emerald-50"
+                    className="mt-5 inline-block rounded-full border border-white/[0.15] bg-white/[0.08] px-5 py-3 text-sm font-extrabold text-white transition hover:bg-white/[0.12]"
                   >
-                    Ver opiniones directamente en Google Maps
+                    View reviews directly on Google Maps
                   </Link>
                 </>
               )}
@@ -515,47 +512,48 @@ export default async function Home() {
 
       <section className="jungle-band py-12 text-white">
         <div className="mx-auto max-w-6xl px-4">
-          <h2 className="text-center text-4xl font-extrabold">Contactanos directamente</h2>
+          <p className="text-center text-xs font-black uppercase tracking-[0.24em] text-[var(--brand-gold)]">Start Your Journey</p>
+          <h2 className="mt-3 text-center text-4xl font-extrabold">When you're ready, we'll help you plan your trip</h2>
           <div className="mt-8 grid gap-4 md:grid-cols-2">
-            <article className="rounded-2xl border border-white/20 bg-white/10 p-6 backdrop-blur-sm">
-              <h3 className="text-2xl font-extrabold">Canales de atencion</h3>
+            <article className="rounded-3xl border border-white/10 bg-white/10 p-6 backdrop-blur-sm">
+              <h3 className="text-2xl font-extrabold">Contact channels</h3>
               <div className="mt-4 space-y-3 text-sm font-semibold text-emerald-50">
-                <p className="flex items-center gap-2"><PhoneIcon /> +506 6015 9782 / +506 7154 6738</p>
-                <p className="flex items-center gap-2"><MailIcon /> atencionalcliente@guapileslineatours.com</p>
-                <p className="flex items-center gap-2"><ClockIcon /> Lunes a Viernes, 8:00 am a 5:00 pm</p>
-                <p className="flex items-center gap-2"><MapPinIcon /> Costa Rica, Limon, Pococi, La Colonia</p>
+                <p className="flex items-center gap-2"><PhoneIcon /> WhatsApp {siteConfig.whatsappDisplay}</p>
+                <p className="flex items-center gap-2"><MailIcon /> {siteConfig.supportEmail}</p>
+                <p className="flex items-center gap-2"><ClockIcon /> Personalized guidance to define your interests, pace, and dates</p>
+                <p className="flex items-center gap-2"><MapPinIcon /> {siteConfig.location}</p>
               </div>
             </article>
 
-            <article className="rounded-2xl border border-white/20 bg-white/10 p-6 backdrop-blur-sm">
-              <h3 className="text-2xl font-extrabold">Contactanos por WhatsApp</h3>
+            <article className="rounded-3xl border border-white/10 bg-white/10 p-6 backdrop-blur-sm">
+              <h3 className="text-2xl font-extrabold">Tell us about your ideal trip</h3>
               <p className="mt-3 text-emerald-50">
-                Escribenos al +506 6015 9782 y te ayudamos a elegir tour, fechas y metodo de pago en minutos.
+                If you are looking for nature, community, local flavors, or a private experience at your pace, we'll help turn that idea into a real plan.
               </p>
               <a
-                href="https://wa.me/50660159782"
+                href={siteConfig.whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-5 inline-block rounded-lg bg-amber-400 px-5 py-2 text-sm font-extrabold text-slate-900 transition hover:bg-amber-300"
+                className="mt-5 inline-block rounded-full bg-[var(--brand-gold)] px-5 py-2.5 text-sm font-extrabold text-[#11151c] transition hover:brightness-105"
               >
-                Abrir WhatsApp
+                Open WhatsApp
               </a>
             </article>
           </div>
         </div>
       </section>
 
-      <section className="bg-white py-12">
+      <section className="section-band py-12">
         <div className="mx-auto max-w-6xl px-4">
-          <h2 className="text-center text-3xl font-extrabold text-emerald-900">Listo para planear tu aventura</h2>
+          <h2 className="text-center text-3xl font-extrabold text-white">Start the conversation</h2>
           <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_0.85fr]">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+            <div className="rounded-[28px] border border-white/10 bg-[#202630]/92 p-5 shadow-sm">
               <ContactUnifiedForm className="grid gap-4 md:grid-cols-2" />
             </div>
 
-            <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <aside className="overflow-hidden rounded-[28px] border border-white/10 bg-[#202630]/92 shadow-sm">
               <iframe
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d4882.188570334864!2d-83.8047022!3d10.2454627!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x8fa0b9c803e1fc55%3A0x4b43d6084e269201!2sLINEA%20TOURS%20-%20Agencia%20de%20Viajes!5e1!3m2!1ses!2scr!4v1774907290615!5m2!1ses!2scr"
+                src={siteConfig.mapsEmbedUrl}
                 width="400"
                 height="300"
                 style={{ border: 0 }}
@@ -563,13 +561,13 @@ export default async function Home() {
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
                 className="h-56 w-full"
-                title="Mapa de LINEA TOURS"
+                title="Manuel Antonio map"
               />
-              <div className="space-y-2 p-4 text-sm text-slate-700">
-                <p className="flex items-center gap-2"><MapPinIcon /> Guapiles, Limon, Costa Rica</p>
-                <p className="flex items-center gap-2"><ShieldIcon /> Operadores certificados y respaldo local</p>
-                <p className="flex items-center gap-2"><GlobeIcon /> Experiencias rurales, playa y aventura</p>
-                <Link href="/contacto" className="mt-2 inline-block font-extrabold text-emerald-700">Ver contacto completo</Link>
+              <div className="space-y-2 p-5 text-sm text-slate-200">
+                <p className="flex items-center gap-2"><MapPinIcon /> {siteConfig.location}</p>
+                <p className="flex items-center gap-2"><ShieldIcon /> Private experiences, carefully crafted and locally guided</p>
+                <p className="flex items-center gap-2"><GlobeIcon /> Nature, culture, and community in one cohesive journey</p>
+                <Link href="/quienes-somos" className="mt-2 inline-block font-extrabold text-[var(--brand-gold)]">Read our story</Link>
               </div>
             </aside>
           </div>

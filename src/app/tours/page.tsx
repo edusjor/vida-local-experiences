@@ -54,6 +54,8 @@ interface FilterConfig {
   featured: boolean;
 }
 
+type SortOption = "featured" | "price-asc" | "price-desc" | "name-asc" | "name-desc";
+
 const LOCAL_TOURS_KEY = "toursAdminLocalTours";
 const FILTER_CONFIG_KEY = "toursFilterConfig";
 const TOUR_PLACEHOLDER_IMAGE = "/tour-placeholder.svg";
@@ -75,6 +77,25 @@ function formatUsd(value: number) {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.35-4.35" />
+    </svg>
+  );
+}
+
+function FiltersIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 6h16" />
+      <path d="M7 12h10" />
+      <path d="M10 18h4" />
+    </svg>
+  );
 }
 
 type RangeSliderProps = {
@@ -105,9 +126,9 @@ function RangeSlider({
   return (
     <div>
       <div className="relative h-10">
-        <div className="absolute left-0 right-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-emerald-100" />
+        <div className="absolute left-0 right-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-white/10" />
         <div
-          className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-emerald-500"
+          className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-[var(--brand-gold)]"
           style={{ left: `${leftPercent}%`, width: `${Math.max(0, rightPercent - leftPercent)}%` }}
         />
         <input
@@ -135,7 +156,7 @@ function RangeSlider({
           className="dual-range-input absolute left-0 top-0 z-30 h-full w-full"
         />
       </div>
-      <div className="mt-1 flex items-center justify-between text-xs font-bold text-slate-600">
+      <div className="mt-1 flex items-center justify-between text-xs font-bold text-slate-300">
         <span>{getLabel(valueMin)}</span>
         <span>{getLabel(valueMax)}</span>
       </div>
@@ -237,6 +258,20 @@ function getTourLocationLabel(tour: Tour): string {
   return location.join(", ");
 }
 
+function getTourCardTag(tour: Tour): string {
+  const activityType = String(tour.activityType ?? "").trim();
+  if (activityType) return activityType;
+
+  const difficulty = String(tour.difficulty ?? "").trim();
+  if (difficulty) return difficulty;
+
+  if (typeof tour.durationDays === "number" && Number.isFinite(tour.durationDays) && tour.durationDays > 0) {
+    return tour.durationDays === 1 ? "1 dia" : `${tour.durationDays} dias`;
+  }
+
+  return "Privado";
+}
+
 function getTourRouteParam(tour: Tour): string {
   const slug = String(tour.slug ?? "").trim();
   if (slug) return slug;
@@ -252,6 +287,8 @@ export default function ToursPage() {
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
 
   const [searchText, setSearchText] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
+  const [sortOption, setSortOption] = useState<SortOption>("featured");
   const [selectedCountry, setSelectedCountry] = useState("Todos");
   const [selectedZone, setSelectedZone] = useState("Todos");
   const [selectedActivity, setSelectedActivity] = useState("Todos");
@@ -467,8 +504,81 @@ export default function ToursPage() {
     daysMax,
   ]);
 
+  const sortedTours = useMemo(() => {
+    const items = [...filteredTours];
+
+    const compareTitle = (left: Tour, right: Tour) => left.title.localeCompare(right.title, "es", { sensitivity: "base" });
+    const getSortablePrice = (tour: Tour): number | null => {
+      if (!hasReservablePricing(tour)) return null;
+      const effectivePrice = getEffectiveTourPrice(tour);
+      return Number.isFinite(effectivePrice) ? effectivePrice : null;
+    };
+
+    switch (sortOption) {
+      case "price-asc":
+        return items.sort((left, right) => {
+          const leftPrice = getSortablePrice(left);
+          const rightPrice = getSortablePrice(right);
+          if (leftPrice === null && rightPrice === null) return compareTitle(left, right);
+          if (leftPrice === null) return 1;
+          if (rightPrice === null) return -1;
+          return leftPrice - rightPrice || compareTitle(left, right);
+        });
+      case "price-desc":
+        return items.sort((left, right) => {
+          const leftPrice = getSortablePrice(left);
+          const rightPrice = getSortablePrice(right);
+          if (leftPrice === null && rightPrice === null) return compareTitle(left, right);
+          if (leftPrice === null) return 1;
+          if (rightPrice === null) return -1;
+          return rightPrice - leftPrice || compareTitle(left, right);
+        });
+      case "name-asc":
+        return items.sort(compareTitle);
+      case "name-desc":
+        return items.sort((left, right) => compareTitle(right, left));
+      case "featured":
+      default:
+        return items.sort((left, right) => {
+          if (left.featured !== right.featured) return left.featured ? -1 : 1;
+          return compareTitle(left, right);
+        });
+    }
+  }, [filteredTours, sortOption]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (selectedCountry !== "Todos") count += 1;
+    if (selectedZone !== "Todos") count += 1;
+    if (selectedActivity !== "Todos") count += 1;
+    if (selectedCategory !== "Todos") count += 1;
+    if (selectedDifficulty !== "Todos") count += 1;
+    if (onlyFeatured) count += 1;
+    if (filterConfig.price && (priceMin !== numericRanges.minPrice || priceMax !== numericRanges.maxPrice)) count += 1;
+    if (filterConfig.durationDays && (daysMin !== numericRanges.minDays || daysMax !== numericRanges.maxDays)) count += 1;
+    return count;
+  }, [
+    selectedCountry,
+    selectedZone,
+    selectedActivity,
+    selectedCategory,
+    selectedDifficulty,
+    onlyFeatured,
+    filterConfig.price,
+    filterConfig.durationDays,
+    priceMin,
+    priceMax,
+    daysMin,
+    daysMax,
+    numericRanges.minPrice,
+    numericRanges.maxPrice,
+    numericRanges.minDays,
+    numericRanges.maxDays,
+  ]);
+
   const clearFilters = () => {
     setSearchText("");
+    setSearchDraft("");
     setSelectedCountry("Todos");
     setSelectedZone("Todos");
     setSelectedActivity("Todos");
@@ -484,12 +594,12 @@ export default function ToursPage() {
   const filtersControls = (
     <div className="mt-4 space-y-4">
       {filterConfig.country && (
-        <div className="border-b border-slate-200/80 pb-3 last:border-b-0">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Pais</p>
+        <div className="border-b border-white/10 pb-3 last:border-b-0">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Country</p>
           <select
             value={selectedCountry}
             onChange={(e) => setSelectedCountry(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            className="w-full rounded-xl border border-white/10 bg-[#171c24] px-3 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition focus:border-[var(--brand-gold)] focus:outline-none focus:ring-2 focus:ring-[rgba(250,178,79,0.12)]"
           >
             {countries.map((country) => (
               <option key={country}>{country}</option>
@@ -499,12 +609,12 @@ export default function ToursPage() {
       )}
 
       {filterConfig.zone && (
-        <div className="border-b border-slate-200/80 pb-3 last:border-b-0">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Zona</p>
+        <div className="border-b border-white/10 pb-3 last:border-b-0">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Area</p>
           <select
             value={selectedZone}
             onChange={(e) => setSelectedZone(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            className="w-full rounded-xl border border-white/10 bg-[#171c24] px-3 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition focus:border-[var(--brand-gold)] focus:outline-none focus:ring-2 focus:ring-[rgba(250,178,79,0.12)]"
           >
             {zones.map((zone) => (
               <option key={zone}>{zone}</option>
@@ -514,12 +624,12 @@ export default function ToursPage() {
       )}
 
       {filterConfig.category && (
-        <div className="border-b border-slate-200/80 pb-3 last:border-b-0">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Categoria</p>
+        <div className="border-b border-white/10 pb-3 last:border-b-0">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Category</p>
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            className="w-full rounded-xl border border-white/10 bg-[#171c24] px-3 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition focus:border-[var(--brand-gold)] focus:outline-none focus:ring-2 focus:ring-[rgba(250,178,79,0.12)]"
           >
             {categoryOptions.map((option) => (
               <option key={option}>{option}</option>
@@ -529,12 +639,12 @@ export default function ToursPage() {
       )}
 
       {filterConfig.activityType && (
-        <div className="border-b border-slate-200/80 pb-3 last:border-b-0">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Actividad</p>
+        <div className="border-b border-white/10 pb-3 last:border-b-0">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Activity</p>
           <select
             value={selectedActivity}
             onChange={(e) => setSelectedActivity(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            className="w-full rounded-xl border border-white/10 bg-[#171c24] px-3 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition focus:border-[var(--brand-gold)] focus:outline-none focus:ring-2 focus:ring-[rgba(250,178,79,0.12)]"
           >
             {activities.map((activity) => (
               <option key={activity}>{activity}</option>
@@ -544,12 +654,12 @@ export default function ToursPage() {
       )}
 
       {filterConfig.difficulty && (
-        <div className="border-b border-slate-200/80 pb-3 last:border-b-0">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Dificultad</p>
+        <div className="border-b border-white/10 pb-3 last:border-b-0">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Difficulty</p>
           <select
             value={selectedDifficulty}
             onChange={(e) => setSelectedDifficulty(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            className="w-full rounded-xl border border-white/10 bg-[#171c24] px-3 py-2.5 text-sm font-semibold text-slate-100 shadow-sm transition focus:border-[var(--brand-gold)] focus:outline-none focus:ring-2 focus:ring-[rgba(250,178,79,0.12)]"
           >
             {difficulties.map((difficulty) => (
               <option key={difficulty}>{difficulty}</option>
@@ -559,8 +669,8 @@ export default function ToursPage() {
       )}
 
       {filterConfig.price && (
-        <div className="border-b border-slate-200/80 pb-3 last:border-b-0">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Precio</p>
+        <div className="border-b border-white/10 pb-3 last:border-b-0">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Price</p>
           <RangeSlider
             minLimit={numericRanges.minPrice}
             maxLimit={numericRanges.maxPrice}
@@ -574,8 +684,8 @@ export default function ToursPage() {
       )}
 
       {filterConfig.durationDays && (
-        <div className="border-b border-slate-200/80 pb-3 last:border-b-0">
-          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Duracion en dias</p>
+        <div className="border-b border-white/10 pb-3 last:border-b-0">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Duration (days)</p>
           <RangeSlider
             minLimit={numericRanges.minDays}
             maxLimit={numericRanges.maxDays}
@@ -583,15 +693,15 @@ export default function ToursPage() {
             valueMax={daysMax}
             onMinChange={setDaysMin}
             onMaxChange={setDaysMax}
-            formatLabel={(value) => `${value} dia(s)`}
+            formatLabel={(value) => `${value} day(s)`}
           />
         </div>
       )}
 
       {filterConfig.featured && (
-        <label className="flex items-center gap-2 pb-1 text-sm font-semibold text-slate-700">
-          <input type="checkbox" checked={onlyFeatured} onChange={(e) => setOnlyFeatured(e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
-          Solo destacados
+        <label className="flex items-center gap-2 pb-1 text-sm font-semibold text-slate-200">
+          <input type="checkbox" checked={onlyFeatured} onChange={(e) => setOnlyFeatured(e.target.checked)} className="h-4 w-4 rounded border-white/20 accent-[var(--brand-gold)]" />
+          Featured only
         </label>
       )}
     </div>
@@ -599,140 +709,231 @@ export default function ToursPage() {
 
   return (
     <section className="mx-auto w-full max-w-7xl px-4 py-10">
-      <div className="rounded-3xl bg-gradient-to-r from-emerald-900 via-emerald-700 to-teal-600 px-6 py-8 text-white">
-        <h2 className="text-4xl font-extrabold">Explora nuestros tours</h2>
+      <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[#171c24] shadow-[0_28px_72px_rgba(0,0,0,0.28)]">
+        <img
+          src="https://images.unsplash.com/photo-1509233725247-49e657c54213?auto=format&fit=crop&w=1800&q=80"
+          alt="Costa Rica landscape"
+          className="absolute inset-0 h-full w-full object-cover opacity-28"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(7,10,15,0.92)_0%,rgba(7,10,15,0.82)_45%,rgba(7,10,15,0.74)_100%)]" />
+        <div className="relative z-10 px-6 py-8 md:px-8 md:py-10">
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-[var(--brand-gold)]">All Tours</p>
+          <h2 className="mt-3 max-w-3xl text-4xl font-extrabold text-white md:text-5xl">Explore our experiences</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-200 md:text-base">
+            Discover private, local, and authentic experiences in Manuel Antonio, Dominical, and Uvita with a more intentional pace.
+          </p>
+
+          <form
+            className="mt-8 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSearchText(searchDraft.trim());
+            }}
+          >
+            <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-[#202630]/92 px-4 py-3 text-slate-300 shadow-lg shadow-black/10">
+              <SearchIcon />
+              <input
+                value={searchDraft}
+                onChange={(e) => setSearchDraft(e.target.value)}
+                placeholder="Search by name, description, country, or activity"
+                className="w-full bg-transparent text-sm font-semibold text-white placeholder:text-slate-500 focus:outline-none"
+              />
+            </label>
+
+            <button
+              type="submit"
+              className="rounded-2xl bg-[var(--brand-gold)] px-5 py-3 text-sm font-extrabold text-[#11151c] transition hover:brightness-105"
+            >
+              Search
+            </button>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[auto_250px]">
+              <button
+                type="button"
+                onClick={() => setIsMobileFiltersOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-[#202630]/92 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-[#26303d]"
+              >
+                <FiltersIcon />
+                <span>All filters</span>
+                {activeFiltersCount > 0 ? (
+                  <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-[var(--brand-gold)] px-2 py-0.5 text-[11px] font-black text-[#11151c]">
+                    {activeFiltersCount}
+                  </span>
+                ) : null}
+              </button>
+
+              <label className="flex items-center gap-3 rounded-2xl border border-white/15 bg-[#202630]/92 px-4 py-3 text-sm font-bold text-slate-300">
+                <span className="whitespace-nowrap text-slate-400">Sort by</span>
+                <select
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value as SortOption)}
+                  className="w-full appearance-none rounded-xl border border-white/10 bg-[#1b2230] px-2 py-1 font-extrabold text-white focus:border-[var(--brand-gold)] focus:outline-none"
+                >
+                  <option value="featured" className="bg-[#1b2230] text-white">Featured</option>
+                  <option value="price-asc" className="bg-[#1b2230] text-white">Price: low to high</option>
+                  <option value="price-desc" className="bg-[#1b2230] text-white">Price: high to low</option>
+                  <option value="name-asc" className="bg-[#1b2230] text-white">Name: A-Z</option>
+                  <option value="name-desc" className="bg-[#1b2230] text-white">Name: Z-A</option>
+                </select>
+              </label>
+            </div>
+          </form>
+        </div>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[290px_1fr]">
-        <aside className="sticky top-6 hidden h-fit rounded-3xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50 p-5 shadow-xl shadow-slate-300/40 lg:block">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg font-extrabold text-slate-900">Filtros</h3>
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="text-sm font-bold text-rose-600 transition hover:text-rose-700"
-            >
-              Limpiar
-            </button>
-          </div>
-          {filtersControls}
-        </aside>
+      <div className="mt-6">
+        {loadError && (
+          <p className="mb-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-3 text-sm font-semibold text-rose-200">{loadError}</p>
+        )}
 
-        <div>
-          <div className="mb-4 lg:hidden">
-            <button
-              type="button"
-              onClick={() => setIsMobileFiltersOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-extrabold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-500"
-            >
-              <span>Filtros</span>
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/40 text-[11px]">+</span>
-            </button>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-extrabold uppercase tracking-[0.18em] text-[var(--brand-gold)]">Results</p>
+            <p className="mt-1 text-2xl font-black text-white">{sortedTours.length} experiences</p>
           </div>
 
-          {loadError && (
-            <p className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{loadError}</p>
-          )}
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <input
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              placeholder="Buscar tour por nombre, descripcion, pais o actividad"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2"
-            />
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            {searchText ? (
+              <span className="rounded-full border border-white/10 bg-[#202630]/92 px-3 py-1.5 font-semibold text-slate-200">
+                Searching: {searchText}
+              </span>
+            ) : null}
+            {activeFiltersCount > 0 ? (
+              <span className="rounded-full border border-white/10 bg-[#202630]/92 px-3 py-1.5 font-semibold text-slate-200">
+                {activeFiltersCount} active filters
+              </span>
+            ) : null}
+            {(searchText || activeFiltersCount > 0) ? (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="font-bold text-[var(--brand-gold)] transition hover:text-white"
+              >
+                Clear all
+              </button>
+            ) : null}
           </div>
+        </div>
 
-          {loading && <p className="mt-6 text-slate-500">Cargando tours...</p>}
+        {loading ? <p className="mt-6 text-slate-400">Loading tours...</p> : null}
 
-          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {filteredTours.map((tour) => (
+        <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {sortedTours.map((tour) => (
               (() => {
                 const locationLabel = getTourLocationLabel(tour);
                 const priceLabel = getTourPriceLabel(tour);
+                const cardTag = getTourCardTag(tour);
                 return (
-              <article key={tour.id} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-xl shadow-slate-300/40">
-                <div className="relative">
-                  <img src={tour.images?.[0] || TOUR_PLACEHOLDER_IMAGE} alt={tour.title} className="h-44 w-full object-cover" />
-                  {tour.featured && (
-                    <span className="absolute left-3 top-3 rounded-full bg-amber-400 px-3 py-1 text-xs font-black text-slate-900">Destacado</span>
-                  )}
-                </div>
-                <div className="flex flex-1 flex-col p-5">
-                  <p className="text-xs font-extrabold uppercase tracking-wide text-emerald-700">{tour.category?.name ?? "Tour"}</p>
-                  <h3 className="mt-1 text-base font-bold leading-snug text-slate-900">{tour.title}</h3>
-                  <p className="mt-2 line-clamp-3 whitespace-pre-line text-slate-600">{tour.description}</p>
-
-                  <div className="mt-3 min-h-10">
-                    {locationLabel && (
-                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                        {locationLabel}
+              <article key={tour.id} className="group relative isolate min-h-[360px] overflow-hidden rounded-[28px] border border-white/10 bg-[#11161d] shadow-[0_24px_56px_rgba(0,0,0,0.28)]">
+                <img
+                  src={tour.images?.[0] || TOUR_PLACEHOLDER_IMAGE}
+                  alt={tour.title}
+                  className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(109,188,228,0.18),transparent_28%),linear-gradient(180deg,rgba(7,10,15,0.14)_0%,rgba(7,10,15,0.3)_26%,rgba(7,10,15,0.72)_68%,rgba(7,10,15,0.92)_100%)]" />
+                <div className="relative z-10 flex h-full flex-col p-5">
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full bg-[rgba(28,91,56,0.92)] px-3 py-1 text-xs font-black text-white shadow-lg shadow-black/10">
+                      {tour.category?.name ?? "Tour"}
+                    </span>
+                    <span className="rounded-full border border-white/12 bg-[rgba(37,44,57,0.82)] px-3 py-1 text-xs font-black text-white backdrop-blur-sm">
+                      {cardTag}
+                    </span>
+                    {tour.featured ? (
+                      <span className="rounded-full border border-[var(--brand-gold)]/40 bg-[rgba(250,178,79,0.16)] px-3 py-1 text-xs font-black text-[var(--brand-gold)] backdrop-blur-sm">
+                        Featured
                       </span>
-                    )}
+                    ) : null}
                   </div>
 
-                  <div className="mt-auto flex items-center justify-between gap-3 pt-4">
-                    {priceLabel ? (
-                      <span className="text-3xl font-black text-emerald-600">{priceLabel}</span>
-                    ) : (
-                      <span className="text-sm font-bold uppercase tracking-wide text-slate-400">Solo informativo</span>
-                    )}
-                    <Link
-                      href={`/tours/${encodeURIComponent(getTourRouteParam(tour))}`}
-                      className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-extrabold text-slate-900 transition hover:bg-amber-300"
-                    >
-                      Ver detalles
-                    </Link>
+                  <div className="mt-auto">
+                    <h3 className="max-w-[20ch] text-[1.42rem] font-black leading-[1.12] text-white drop-shadow-[0_4px_18px_rgba(0,0,0,0.35)] md:text-[1.56rem]">
+                      {tour.title}
+                    </h3>
+                    {locationLabel ? <p className="mt-3 text-sm font-semibold text-slate-200">{locationLabel}</p> : null}
+
+                    <div className="mt-5 flex items-end justify-between gap-3">
+                      <Link
+                        href={`/tours/${encodeURIComponent(getTourRouteParam(tour))}`}
+                        className="rounded-full bg-[var(--brand-gold)] px-4 py-2.5 text-sm font-extrabold text-[#11151c] transition hover:brightness-105"
+                      >
+                        View tour
+                      </Link>
+                      {priceLabel ? (
+                        <span className="text-[1.7rem] font-black text-white drop-shadow-[0_4px_18px_rgba(0,0,0,0.35)] md:text-[1.9rem]">{priceLabel}</span>
+                      ) : (
+                        <span className="rounded-full border border-white/12 bg-[rgba(22,26,34,0.72)] px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-200 backdrop-blur-sm">
+                          Info only
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </article>
                 );
               })()
             ))}
-          </div>
-
-          {!loading && filteredTours.length === 0 && (
-            <p className="mt-6 rounded-xl bg-white p-4 text-slate-600 shadow">No hay tours que coincidan con los filtros seleccionados.</p>
-          )}
         </div>
+
+        {!loading && sortedTours.length === 0 && (
+          <p className="mt-6 rounded-2xl border border-white/10 bg-[#202630]/92 p-4 text-slate-300 shadow">No tours match the selected filters.</p>
+        )}
       </div>
 
       {isMobileFiltersOpen && (
-        <div className="fixed inset-0 z-[70] lg:hidden" role="dialog" aria-modal="true" aria-label="Panel de filtros">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Filters panel">
           <button
             type="button"
-            className="absolute inset-0 bg-slate-950/40 backdrop-blur-[1px]"
+            className="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]"
             onClick={() => setIsMobileFiltersOpen(false)}
-            aria-label="Cerrar panel de filtros"
+            aria-label="Close filters panel"
           />
 
-          <div className="absolute right-0 top-0 h-full w-full max-w-sm overflow-y-auto bg-white p-5 shadow-2xl shadow-black/30">
-            <div className="sticky top-0 z-10 -mx-5 -mt-5 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
-              <h3 className="text-xl font-extrabold text-slate-900">Filtrar por</h3>
+          <div className="relative z-10 flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px] border border-white/10 bg-[#202630] shadow-[0_28px_80px_rgba(0,0,0,0.42)]">
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-5 md:px-6">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--brand-gold)]">Filters</p>
+                <h3 className="mt-1 text-xl font-extrabold text-white">Customize your search</h3>
+              </div>
               <div className="flex items-center gap-4">
-                <button type="button" onClick={clearFilters} className="text-sm font-bold text-rose-500">
-                  Limpiar
+                <button type="button" onClick={clearFilters} className="text-sm font-bold text-[var(--brand-gold)] transition hover:text-white">
+                  Clear
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsMobileFiltersOpen(false)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 text-xl leading-none text-slate-700"
-                  aria-label="Cerrar filtros"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-xl leading-none text-white"
+                  aria-label="Close filters"
                 >
                   ×
                 </button>
               </div>
             </div>
 
-            {filtersControls}
+            <div className="overflow-y-auto px-5 py-5 md:px-6">{filtersControls}</div>
 
-            <div className="sticky bottom-0 -mx-5 mt-6 border-t border-slate-200 bg-white px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4 md:px-6">
+              <label className="flex min-w-[220px] items-center gap-3 rounded-2xl border border-white/10 bg-[#171c24] px-4 py-3 text-sm font-bold text-slate-300">
+                <span className="whitespace-nowrap text-slate-400">Sort by</span>
+                <select
+                  value={sortOption}
+                  onChange={(e) => setSortOption(e.target.value as SortOption)}
+                  className="w-full appearance-none rounded-xl border border-white/10 bg-[#1b2230] px-2 py-1 font-extrabold text-white focus:border-[var(--brand-gold)] focus:outline-none"
+                >
+                  <option value="featured" className="bg-[#1b2230] text-white">Featured</option>
+                  <option value="price-asc" className="bg-[#1b2230] text-white">Price: low to high</option>
+                  <option value="price-desc" className="bg-[#1b2230] text-white">Price: high to low</option>
+                  <option value="name-asc" className="bg-[#1b2230] text-white">Name: A-Z</option>
+                  <option value="name-desc" className="bg-[#1b2230] text-white">Name: Z-A</option>
+                </select>
+              </label>
+
               <button
                 type="button"
                 onClick={() => setIsMobileFiltersOpen(false)}
-                className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-500"
+                className="rounded-2xl bg-[var(--brand-gold)] px-5 py-3 text-sm font-extrabold text-[#11151c] transition hover:brightness-105"
               >
-                Aplicar filtros
+                View results
               </button>
             </div>
           </div>

@@ -2,12 +2,19 @@ import nodemailer from 'nodemailer';
 import { prisma } from './prisma';
 import { getOnvoPaymentIntent } from './onvo';
 import { getReservationCheckoutDetailsById } from './reservationDetails';
+import { siteConfig } from './siteConfig';
+
+function envOrFallback(value: string | undefined, fallback: string): string {
+  const normalized = String(value ?? '').trim();
+  return normalized || fallback;
+}
 
 const APPROVED_PAYMENT_STATUSES = new Set(['succeeded', 'paid', 'approved']);
-const DEFAULT_RESERVATION_ADMIN_EMAIL = 'reservaciones@guapileslineatours.com';
-const SUPPORT_EMAIL = 'atencionalcliente@guapileslineatours.com';
-const SUPPORT_WHATSAPP = '+506 7154-6738';
-const SUPPORT_LOCATION = 'Costa Rica, Limon, Pococi, La Colonia';
+const DEFAULT_RESERVATION_ADMIN_EMAIL = siteConfig.supportEmail;
+const SUPPORT_EMAIL = envOrFallback(process.env.CONTACT_TO_EMAIL, siteConfig.supportEmail);
+const SUPPORT_WHATSAPP = envOrFallback(process.env.BUSINESS_WHATSAPP, siteConfig.whatsappDisplay);
+const SUPPORT_LOCATION = envOrFallback(process.env.BUSINESS_LOCATION, siteConfig.location);
+const BRAND_NAME = siteConfig.brandName;
 
 type FinalizeReservationResult =
   | { ok: true; alreadyPaid: boolean; message: string }
@@ -106,14 +113,14 @@ async function sendReservationConfirmationEmail(input: {
     `WhatsApp: ${SUPPORT_WHATSAPP}`,
     `Ubicacion: ${SUPPORT_LOCATION}`,
     '',
-    'Gracias por reservar con nosotros.',
+    `Gracias por confiar en ${BRAND_NAME}.`,
   ].join('\n');
 
   const html = `
-    <div style="font-family:Arial,Helvetica,sans-serif;background:#f8fafc;padding:24px;color:#0f172a;">
+    <div style="font-family:Arial,Helvetica,sans-serif;background:#12171e;padding:24px;color:#f8fafc;">
       <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
-        <div style="background:linear-gradient(135deg,#065f46,#0f766e);padding:22px 24px;color:#ffffff;">
-          <p style="margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.9;">Guapiles Linea Tours</p>
+        <div style="background:linear-gradient(135deg,#0f2f1f,#1c5b38);padding:22px 24px;color:#ffffff;">
+          <p style="margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.9;">${BRAND_NAME}</p>
           <h2 style="margin:8px 0 0;font-size:28px;line-height:1.2;">Reserva confirmada</h2>
         </div>
 
@@ -142,14 +149,14 @@ async function sendReservationConfirmationEmail(input: {
             </ul>
           </div>
 
-          <div style="margin-top:16px;padding:14px;border:1px solid #bae6fd;background:#f0f9ff;border-radius:10px;">
-            <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#0c4a6e;">Atencion al cliente</p>
+          <div style="margin-top:16px;padding:14px;border:1px solid #f6c26a;background:#fff7e8;border-radius:10px;">
+            <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#7a5419;">Atencion al cliente</p>
             <p style="margin:0;font-size:14px;color:#0f172a;"><strong>Correo:</strong> ${SUPPORT_EMAIL}</p>
             <p style="margin:4px 0 0;font-size:14px;color:#0f172a;"><strong>WhatsApp:</strong> ${SUPPORT_WHATSAPP}</p>
             <p style="margin:4px 0 0;font-size:14px;color:#0f172a;"><strong>Ubicacion:</strong> ${SUPPORT_LOCATION}</p>
           </div>
 
-          <p style="margin:16px 0 0;font-size:14px;color:#334155;">Gracias por reservar con nosotros.</p>
+          <p style="margin:16px 0 0;font-size:14px;color:#334155;">Gracias por confiar en ${BRAND_NAME}.</p>
         </div>
       </div>
     </div>
@@ -243,13 +250,15 @@ async function sendReservationPendingValidationEmail(input: {
     `Correo: ${SUPPORT_EMAIL}`,
     `WhatsApp: ${SUPPORT_WHATSAPP}`,
     `Ubicacion: ${SUPPORT_LOCATION}`,
+    '',
+    `Gracias por confiar en ${BRAND_NAME}.`,
   ].join('\n');
 
   const html = `
-    <div style="font-family:Arial,Helvetica,sans-serif;background:#f8fafc;padding:24px;color:#0f172a;">
+    <div style="font-family:Arial,Helvetica,sans-serif;background:#12171e;padding:24px;color:#f8fafc;">
       <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
-        <div style="background:linear-gradient(135deg,#9a3412,#ea580c);padding:22px 24px;color:#ffffff;">
-          <p style="margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.9;">Guapiles Linea Tours</p>
+        <div style="background:linear-gradient(135deg,#5c4115,#c98928);padding:22px 24px;color:#ffffff;">
+          <p style="margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.9;">${BRAND_NAME}</p>
           <h2 style="margin:8px 0 0;font-size:28px;line-height:1.2;">Reserva por confirmar</h2>
         </div>
 
@@ -281,12 +290,14 @@ async function sendReservationPendingValidationEmail(input: {
             </ul>
           </div>
 
-          <div style="margin-top:16px;padding:14px;border:1px solid #bae6fd;background:#f0f9ff;border-radius:10px;">
-            <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#0c4a6e;">Atencion al cliente</p>
+          <div style="margin-top:16px;padding:14px;border:1px solid #f6c26a;background:#fff7e8;border-radius:10px;">
+            <p style="margin:0 0 8px;font-size:14px;font-weight:700;color:#7a5419;">Atencion al cliente</p>
             <p style="margin:0;font-size:14px;color:#0f172a;"><strong>Correo:</strong> ${SUPPORT_EMAIL}</p>
             <p style="margin:4px 0 0;font-size:14px;color:#0f172a;"><strong>WhatsApp:</strong> ${SUPPORT_WHATSAPP}</p>
             <p style="margin:4px 0 0;font-size:14px;color:#0f172a;"><strong>Ubicacion:</strong> ${SUPPORT_LOCATION}</p>
           </div>
+
+          <p style="margin:16px 0 0;font-size:14px;color:#334155;">Gracias por confiar en ${BRAND_NAME}.</p>
         </div>
       </div>
     </div>

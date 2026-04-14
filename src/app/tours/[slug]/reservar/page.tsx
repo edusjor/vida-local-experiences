@@ -31,7 +31,7 @@ const ONVO_SDK_URL = "https://sdk.onvopay.com/sdk.js";
 let onvoScriptPromise: Promise<void> | null = null;
 
 function loadOnvoScript(): Promise<void> {
-  if (typeof window === "undefined") return Promise.reject(new Error("ONVO SDK solo esta disponible en el navegador."));
+  if (typeof window === "undefined") return Promise.reject(new Error("ONVO SDK is only available in the browser."));
   if (window.onvo?.pay) return Promise.resolve();
   if (onvoScriptPromise) return onvoScriptPromise;
 
@@ -43,7 +43,7 @@ function loadOnvoScript(): Promise<void> {
         return;
       }
       existingScript.addEventListener("load", () => resolve(), { once: true });
-      existingScript.addEventListener("error", () => reject(new Error("No se pudo cargar el SDK de ONVO.")), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("Could not load the ONVO SDK.")), { once: true });
       return;
     }
 
@@ -51,7 +51,7 @@ function loadOnvoScript(): Promise<void> {
     script.src = ONVO_SDK_URL;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error("No se pudo cargar el SDK de ONVO."));
+    script.onerror = () => reject(new Error("Could not load the ONVO SDK."));
     document.head.appendChild(script);
   });
 
@@ -360,7 +360,7 @@ function getVisiblePriceOptions(options: TourPriceOption[]): TourPriceOption[] {
 }
 
 function formatOptionPrice(option: TourPriceOption): string {
-  if (option.isFree || option.price === 0) return "Gratis";
+  if (option.isFree || option.price === 0) return "Free";
   return formatCurrencyUSD(option.price);
 }
 
@@ -388,7 +388,7 @@ function buildNormalizedPackages(tour: { tourPackages?: unknown; priceOptions?: 
     return [
       {
         id: "package-main",
-        title: "Paquete principal",
+        title: "Main package",
         description: "",
         priceOptions: legacyOptions,
       },
@@ -504,7 +504,7 @@ function ReservarPageContent({
   const [phoneCountryDialCode, setPhoneCountryDialCode] = useState("");
   const [phone, setPhone] = useState("");
   const [hotel, setHotel] = useState("");
-  const [payMethod, setPayMethod] = useState("Tarjeta de Credito o Debito (ONVO)");
+  const [payMethod, setPayMethod] = useState("Credit or Debit Card (ONVO)");
   const [sinpeReceiptFile, setSinpeReceiptFile] = useState<File | null>(null);
   const [sinpeReceiptUrl, setSinpeReceiptUrl] = useState("");
   const [isUploadingSinpeReceipt, setIsUploadingSinpeReceipt] = useState(false);
@@ -577,10 +577,10 @@ function ReservarPageContent({
           setLoadError("");
           return;
         }
-        setLoadError("No se encontro informacion del tour solicitado en el servidor.");
+        setLoadError("Could not find information for the requested tour on the server.");
       })
       .catch(() => {
-        setLoadError("No se pudo cargar la informacion del tour desde el servidor.");
+        setLoadError("Could not load tour information from the server.");
       });
   }, [normalizedDateFromQuery, todayDateKey, tourSlug]);
 
@@ -691,7 +691,7 @@ function ReservarPageContent({
   const exceedsMaximumPeople = maximumPeoplePerReservation !== null && totalPeople > maximumPeoplePerReservation;
   const maxPeopleExceededMessage =
     maximumPeoplePerReservation !== null
-      ? `El cupo maximo por compra para esta fecha es de ${maximumPeoplePerReservation} persona${maximumPeoplePerReservation === 1 ? "" : "s"}. Si necesitas un grupo personalizado, contactanos para ayudarte a coordinarlo.`
+      ? `Maximum booking capacity for this date is ${maximumPeoplePerReservation} traveler${maximumPeoplePerReservation === 1 ? "" : "s"}. If you need a custom group arrangement, contact us and we will help coordinate it.`
       : "";
 
   const openScheduleSlots = useMemo(
@@ -724,7 +724,7 @@ function ReservarPageContent({
 
   const effectiveSelectedTime =
     selectedDateTimeOptions.length === 0
-      ? "Por coordinar"
+      ? "To be coordinated"
       : selectedDateTimeOptions.includes(selectedTime)
         ? selectedTime
         : selectedDateTimeOptions[0];
@@ -819,7 +819,7 @@ function ReservarPageContent({
     email.trim() &&
     phoneCountryDialCode.trim() &&
     phone.trim();
-  const isSinpeMobileMethod = payMethod === "SINPE Movil";
+  const isSinpeMobileMethod = payMethod === "SINPE Mobile";
 
   useEffect(() => {
     if (step === "pago" && !canContinueToPay) {
@@ -847,8 +847,8 @@ function ReservarPageContent({
         step: "contacto",
         message:
         hasNoRemainingTimeToday
-          ? "Ya no hay horarios disponibles para hoy. Elige otra fecha para continuar."
-          : `Completa primero el paso 1 (fecha, horario y minimo ${minimumPeople} persona${minimumPeople === 1 ? "" : "s"}).`,
+          ? "There are no available time slots for today. Please choose another date to continue."
+          : `Please complete Step 1 first (date, time, and at least ${minimumPeople} traveler${minimumPeople === 1 ? "" : "s"}).`,
       });
       return;
     }
@@ -866,13 +866,13 @@ function ReservarPageContent({
         step: "pago",
         message:
         hasNoRemainingTimeToday
-          ? "Ya no hay horarios disponibles para hoy. Elige otra fecha para continuar."
-          : `Completa primero el paso 1 (fecha, horario y minimo ${minimumPeople} persona${minimumPeople === 1 ? "" : "s"}).`,
+          ? "There are no available time slots for today. Please choose another date to continue."
+          : `Please complete Step 1 first (date, time, and at least ${minimumPeople} traveler${minimumPeople === 1 ? "" : "s"}).`,
       });
       return;
     }
     if (!canContinueToPay) {
-      setStepError({ step: "pago", message: "Completa tus datos de contacto para poder abrir el paso de pago." });
+      setStepError({ step: "pago", message: "Complete your contact details to open the payment step." });
       return;
     }
     setStepError(null);
@@ -949,23 +949,23 @@ function ReservarPageContent({
     e.preventDefault();
 
     if (isInfoOnlyTour) {
-      setStatus("Este tour es solo informativo y no permite reservas en linea.");
+      setStatus("This tour is informational only and does not allow online bookings.");
       return;
     }
 
     if (hasNoRemainingTimeToday) {
-      setStatus("Ya no hay horarios disponibles para hoy. Elige otra fecha.");
+      setStatus("There are no available time slots for today. Please choose another date.");
       return;
     }
 
     const people = totalPeople;
     if (people <= 0) {
-      setStatus("Selecciona al menos una persona para continuar.");
+      setStatus("Select at least one traveler to continue.");
       return;
     }
 
     if (people < minimumPeople) {
-      setStatus(`Este tour requiere minimo ${minimumPeople} persona${minimumPeople === 1 ? "" : "s"}.`);
+      setStatus(`This tour requires at least ${minimumPeople} traveler${minimumPeople === 1 ? "" : "s"}.`);
       return;
     }
 
@@ -985,14 +985,14 @@ function ReservarPageContent({
 
     if (isSinpeMobileMethod) {
       if (!sinpeReceiptFile && !uploadedSinpeReceiptUrl) {
-        setStatus("Para SINPE Movil debes subir el comprobante antes de completar la reserva.");
+        setStatus("For SINPE Mobile, you must upload the receipt before completing the booking.");
         return;
       }
 
       if (!uploadedSinpeReceiptUrl && sinpeReceiptFile) {
         try {
           setIsUploadingSinpeReceipt(true);
-          setStatus("Subiendo comprobante SINPE...");
+          setStatus("Uploading SINPE receipt...");
 
           const formData = new FormData();
           formData.append("receipt", sinpeReceiptFile);
@@ -1003,13 +1003,13 @@ function ReservarPageContent({
           const uploadPayload = await uploadRes.json().catch(() => null);
 
           if (!uploadRes.ok) {
-            setStatus(uploadPayload?.error ? `No se pudo subir el comprobante: ${uploadPayload.error}` : "No se pudo subir el comprobante SINPE.");
+            setStatus(uploadPayload?.error ? `Could not upload receipt: ${uploadPayload.error}` : "Could not upload SINPE receipt.");
             return;
           }
 
           uploadedSinpeReceiptUrl = String(uploadPayload?.url ?? "").trim();
           if (!uploadedSinpeReceiptUrl) {
-            setStatus("No se recibio URL valida del comprobante SINPE.");
+            setStatus("A valid SINPE receipt URL was not received.");
             return;
           }
 
@@ -1023,10 +1023,10 @@ function ReservarPageContent({
     try {
       setIsCreatingPayment(true);
       setIsConfirmingReservation(false);
-      setStatus(isSinpeMobileMethod ? "Validando reserva SINPE..." : "Preparando tu reserva y creando la sesion de pago...");
+      setStatus(isSinpeMobileMethod ? "Validating SINPE booking..." : "Preparing your booking and creating the payment session...");
 
       if (!tour) {
-        setStatus("No se encontro la informacion del tour. Recarga la pagina e intenta nuevamente.");
+        setStatus("Tour information was not found. Reload the page and try again.");
         return;
       }
 
@@ -1057,21 +1057,21 @@ function ReservarPageContent({
       const payload = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setStatus(payload?.error ? `No se pudo confirmar la reserva: ${payload.error}` : "No se pudo confirmar la reserva.");
+        setStatus(payload?.error ? `Could not confirm booking: ${payload.error}` : "Could not confirm booking.");
         return;
       }
 
       if (!payload?.requiresPayment) {
         const reservationId = Number(payload?.reservationId);
         if (!Number.isFinite(reservationId) || reservationId <= 0) {
-          setStatus("La reserva se creo, pero no se recibio un numero de reserva valido.");
+          setStatus("The booking was created, but a valid booking number was not received.");
           return;
         }
         const nextMessage =
           String(payload?.message || "").trim() ||
           (isSinpeMobileMethod
-            ? "Recibimos tu comprobante. Te contactaremos cuando el pago sea validado."
-            : "Reserva confirmada. Te enviamos el detalle por correo.");
+            ? "We received your receipt. We will contact you once payment is validated."
+            : "Booking confirmed. We have sent your details by email.");
 
         if (isSinpeMobileMethod) {
           navigateToConfirmation({
@@ -1097,19 +1097,19 @@ function ReservarPageContent({
       const reservationId = Number(payload?.reservationId);
 
       if (!paymentIntentId || !publicKey || !Number.isFinite(reservationId) || reservationId <= 0) {
-        setStatus("No se pudo iniciar el checkout. Intenta nuevamente.");
+        setStatus("Could not start checkout. Please try again.");
         return;
       }
 
       await loadOnvoScript();
       if (!window.onvo?.pay) {
-        setStatus("No se pudo inicializar ONVO. Recarga la pagina e intenta nuevamente.");
+        setStatus("Could not initialize ONVO. Reload the page and try again.");
         return;
       }
 
       const mountNode = document.getElementById("onvo-checkout-container");
       if (!mountNode) {
-        setStatus("No se encontro el contenedor de pago. Intenta nuevamente.");
+        setStatus("Payment container was not found. Please try again.");
         return;
       }
       mountNode.innerHTML = "";
@@ -1118,17 +1118,17 @@ function ReservarPageContent({
         publicKey,
         paymentIntentId,
         paymentType: "one_time",
-        locale: "es",
+        locale: "en",
         onError: (onvoError) => {
           const errorMessage =
             typeof onvoError === "object" && onvoError && "message" in onvoError
               ? String((onvoError as { message?: string }).message || "")
               : "";
-          setStatus(errorMessage ? `Error en el pago: ${errorMessage}` : "El pago no pudo procesarse. Revisa los datos e intenta nuevamente.");
+          setStatus(errorMessage ? `Payment error: ${errorMessage}` : "Payment could not be processed. Check your details and try again.");
         },
         onSuccess: async () => {
           try {
-            setStatus("Pago recibido. Confirmando reserva...");
+            setStatus("Payment received. Confirming booking...");
             setIsConfirmingReservation(true);
             const confirmation = await confirmPaymentWithRetry(reservationId, paymentIntentId);
             if (!confirmation.ok) {
@@ -1140,20 +1140,20 @@ function ReservarPageContent({
             navigateToConfirmation({
               reservationId,
               status: "confirmed",
-              paymentMethod: "Tarjeta de Credito o Debito (ONVO)",
+              paymentMethod: "Credit or Debit Card (ONVO)",
               message: confirmation.message,
             });
           } catch {
-            setStatus("Pago recibido, pero no se pudo validar la reserva por un error de conexion.");
+            setStatus("Payment received, but booking could not be validated due to a connection error.");
             setIsConfirmingReservation(false);
           }
         },
       });
 
       onvoCheckout.render("#onvo-checkout-container");
-      setStatus("Completa tu pago en el formulario seguro de ONVO para finalizar la reserva.");
+      setStatus("Complete your payment in the secure ONVO form to finalize your booking.");
     } catch {
-      setStatus("No se pudo confirmar la reserva por un error de conexion.");
+      setStatus("Booking could not be confirmed due to a connection error.");
     } finally {
       setIsCreatingPayment(false);
     }
@@ -1162,15 +1162,15 @@ function ReservarPageContent({
   if (!hydrated) {
     return (
       <section className="mx-auto max-w-6xl px-4 py-8">
-        <div className="h-10 w-56 animate-pulse rounded-lg bg-slate-200" />
-        <div className="mt-3 h-7 w-64 animate-pulse rounded-full bg-slate-200" />
+        <div className="h-10 w-56 animate-pulse rounded-lg bg-white/10" />
+        <div className="mt-3 h-7 w-64 animate-pulse rounded-full bg-white/10" />
         <div className="mt-6 grid gap-6 lg:grid-cols-[1.7fr_1fr]">
           <div className="space-y-6">
-            <div className="h-96 animate-pulse rounded-2xl bg-slate-200" />
-            <div className="h-48 animate-pulse rounded-2xl bg-slate-200" />
-            <div className="h-40 animate-pulse rounded-2xl bg-slate-200" />
+            <div className="h-96 animate-pulse rounded-2xl bg-white/10" />
+            <div className="h-48 animate-pulse rounded-2xl bg-white/10" />
+            <div className="h-40 animate-pulse rounded-2xl bg-white/10" />
           </div>
-          <div className="h-72 animate-pulse rounded-2xl bg-slate-200 lg:sticky lg:top-6" />
+          <div className="h-72 animate-pulse rounded-2xl bg-white/10 lg:sticky lg:top-6" />
         </div>
       </section>
     );
@@ -1179,9 +1179,9 @@ function ReservarPageContent({
   if (!tour) {
     return (
       <section className="mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">Reserva tu tour</h1>
-        <p className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
-          {loadError || "No se pudo cargar la reserva porque el tour no esta disponible."}
+        <h1 className="text-4xl font-extrabold tracking-tight text-white">Book your tour</h1>
+        <p className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm font-semibold text-rose-200">
+          {loadError || "Booking could not be loaded because this tour is unavailable."}
         </p>
       </section>
     );
@@ -1190,9 +1190,9 @@ function ReservarPageContent({
   if (isInfoOnlyTour) {
     return (
       <section className="mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">Reserva tu tour</h1>
-        <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
-          Este tour no tiene precios configurados y no permite reservas en linea.
+        <h1 className="text-4xl font-extrabold tracking-tight text-white">Book your tour</h1>
+        <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm font-semibold text-amber-200">
+          This tour has no configured pricing and does not allow online bookings.
         </p>
       </section>
     );
@@ -1200,27 +1200,27 @@ function ReservarPageContent({
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">Reserva tu tour</h1>
+      <h1 className="text-4xl font-extrabold tracking-tight text-white">Book your tour</h1>
 
-      <div className="mt-3 inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
-        Tiempo restante de carrito: {countdownLabel}
+      <div className="mt-3 inline-flex items-center rounded-full border border-amber-400/30 bg-[rgba(250,178,79,0.14)] px-3 py-1 text-xs font-bold text-amber-200">
+        Cart time remaining: {countdownLabel}
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.7fr_1fr]">
         <div className="space-y-6">
           {loadError && (
-            <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{loadError}</p>
+            <p className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm font-semibold text-rose-200">{loadError}</p>
           )}
 
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <article className="rounded-2xl border border-white/10 bg-[#1c2230]/92 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.24)]">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-extrabold text-slate-900">Paso 1: Paquete, fecha, horario y personas</h2>
+              <h2 className="text-xl font-extrabold text-white">Step 1: Package, date, time, and travelers</h2>
               <button
                 type="button"
-                className={`rounded-full px-3 py-1 text-xs font-bold ${step === "seleccion" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}`}
+                className={`rounded-full px-3 py-1 text-xs font-bold ${step === "seleccion" ? "bg-[var(--brand-gold)] text-[#11151c]" : "bg-white/10 text-slate-300"}`}
                 onClick={openSelectionStep}
               >
-                Seleccion
+                Selection
               </button>
             </div>
 
@@ -1228,25 +1228,25 @@ function ReservarPageContent({
               <>
 
             {Boolean(tour.tourPackages.length) && (
-              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                <p className="text-xs font-bold uppercase tracking-wide text-emerald-800">Paquete seleccionado</p>
+              <div className="mt-4 rounded-xl border border-[var(--brand-gold)]/25 bg-[rgba(250,178,79,0.08)] p-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-[var(--brand-gold)]">Selected package</p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {tour.tourPackages.map((pkg) => (
                     <button
                       key={pkg.id}
                       type="button"
                       onClick={() => setSelectedPackageId(pkg.id)}
-                      className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold transition ${selectedPackage?.id === pkg.id ? "border-emerald-500 bg-white text-emerald-900" : "border-emerald-200 bg-white text-slate-700 hover:border-emerald-300"}`}
+                      className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold transition ${selectedPackage?.id === pkg.id ? "border-[var(--brand-gold)]/40 bg-[rgba(250,178,79,0.14)] text-white" : "border-white/10 bg-[#171c24] text-slate-200 hover:border-[var(--brand-gold)]/40"}`}
                     >
                       {pkg.title}
                     </button>
                   ))}
                 </div>
-                {selectedPackage?.description && <p className="mt-2 text-xs text-slate-600">{selectedPackage.description}</p>}
+                {selectedPackage?.description && <p className="mt-2 text-xs text-slate-300">{selectedPackage.description}</p>}
               </div>
             )}
 
-            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mt-4 rounded-xl border border-white/10 bg-[#171c24] p-4">
               <div className="mb-3 flex items-center justify-between">
                 <button
                   type="button"
@@ -1261,14 +1261,14 @@ function ReservarPageContent({
                     if (month) setVisibleMonth(month);
                   }}
                   disabled={availabilityConfig.mode !== "OPEN" && !previousSpecificAvailableMonthKey}
-                  className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-md border border-white/15 bg-[#1c2230] px-3 py-1 text-xs font-bold text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Prev
                 </button>
-                <p className="text-center text-lg font-extrabold text-slate-800">
+                <p className="text-center text-lg font-extrabold text-white">
                   {visibleMonth
-                    ? visibleMonth.toLocaleString("es-ES", { month: "long", year: "numeric" }).toUpperCase()
-                    : "FECHAS DISPONIBLES"}
+                    ? visibleMonth.toLocaleString("en-US", { month: "long", year: "numeric" }).toUpperCase()
+                    : "AVAILABLE DATES"}
                 </p>
                 <button
                   type="button"
@@ -1283,14 +1283,14 @@ function ReservarPageContent({
                     if (month) setVisibleMonth(month);
                   }}
                   disabled={availabilityConfig.mode !== "OPEN" && !nextSpecificAvailableMonthKey}
-                  className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-md border border-white/15 bg-[#1c2230] px-3 py-1 text-xs font-bold text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Next
                 </button>
               </div>
 
-              <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs font-bold uppercase tracking-wide text-slate-500">
-                {['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'].map((day) => (
+              <div className="mb-2 grid grid-cols-7 gap-1 text-center text-xs font-bold uppercase tracking-wide text-slate-400">
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
                   <span key={day} className="py-1">{day}</span>
                 ))}
               </div>
@@ -1309,12 +1309,12 @@ function ReservarPageContent({
 
                   const openMaxLabel = availabilityConfig.openSchedule.maxPeople;
                   const tooltip = isPastDay
-                    ? "No disponible. Solo se permiten fechas desde hoy."
+                    ? "Unavailable. Only dates from today onward are allowed."
                     : available
-                    ? `${available.maxPeople} lugares max.`
+                    ? `${available.maxPeople} spots max.`
                     : calendarHasOpenAvailability
-                      ? `Modo abierto: ${openMaxLabel} lugares max.`
-                      : "No disponible";
+                      ? `Open mode: ${openMaxLabel} spots max.`
+                      : "Unavailable";
 
                   return (
                     <button
@@ -1324,10 +1324,10 @@ function ReservarPageContent({
                       onClick={() => setSelectedDateKey(key)}
                       className={`h-10 rounded-md border text-sm font-bold transition ${
                         isActive
-                          ? "border-emerald-700 bg-emerald-700 text-white"
+                          ? "border-[var(--brand-gold)]/45 bg-[rgba(250,178,79,0.24)] text-white"
                           : canSelect
-                            ? "border-emerald-300 bg-emerald-50 text-emerald-900 hover:border-emerald-400"
-                            : "cursor-not-allowed border-slate-200 bg-white text-slate-300"
+                            ? "border-white/15 bg-[#1c2230] text-slate-100 hover:border-[var(--brand-gold)]/45"
+                            : "cursor-not-allowed border-white/10 bg-[#11161d] text-slate-500"
                       }`}
                       title={tooltip}
                     >
@@ -1337,46 +1337,46 @@ function ReservarPageContent({
                 })}
               </div>
 
-              <p className="mt-3 text-xs text-slate-500">
-                <span className="font-bold text-emerald-700">Fechas en color:</span> disponibles para reservar.
+              <p className="mt-3 text-xs text-slate-400">
+                <span className="font-bold text-[var(--brand-gold)]">Highlighted dates:</span> available for booking.
               </p>
             </div>
 
             <div className="mt-5">
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-600">Elige el horario</label>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">Choose a time</label>
                 <select
                   value={effectiveSelectedTime}
                   onChange={(e) => setSelectedTime(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-800"
+                  className="w-full rounded-lg border border-white/15 bg-[#1c2230] px-3 py-2 font-semibold text-slate-100"
                 >
-                  {(selectedDateTimeOptions.length ? selectedDateTimeOptions : ["Por coordinar"]).map((option) => (
+                  {(selectedDateTimeOptions.length ? selectedDateTimeOptions : ["To be coordinated"]).map((option) => (
                     <option key={option} value={option}>
-                      {option === "Por coordinar" ? option : formatTimeLabel(option)}
+                      {option === "To be coordinated" ? option : formatTimeLabel(option)}
                     </option>
                   ))}
                 </select>
                 {hasNoRemainingTimeToday ? (
-                  <p className="mt-2 text-xs font-bold text-rose-700">Ya no quedan horarios para hoy. Selecciona otra fecha.</p>
+                  <p className="mt-2 text-xs font-bold text-rose-200">There are no time slots left for today. Please choose another date.</p>
                 ) : null}
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
-              <p className="text-lg font-extrabold text-slate-900">Precios</p>
-              <p className="mt-1 text-xs text-slate-600">Puedes ajustar paquete y cantidades directamente en checkout.</p>
+            <div className="mt-4 rounded-xl border border-white/10 bg-[#171c24] p-4">
+              <p className="text-lg font-extrabold text-white">Pricing</p>
+              <p className="mt-1 text-xs text-slate-300">You can adjust package and quantities directly in checkout.</p>
               {maximumPeoplePerReservation !== null ? (
-                <p className="mt-2 text-xs font-semibold text-slate-600">
-                  Cupo maximo por compra para esta fecha: {maximumPeoplePerReservation} persona{maximumPeoplePerReservation === 1 ? "" : "s"}.
+                <p className="mt-2 text-xs font-semibold text-slate-300">
+                  Maximum booking capacity for this date: {maximumPeoplePerReservation} traveler{maximumPeoplePerReservation === 1 ? "" : "s"}.
                 </p>
               ) : null}
               {!meetsMinimumPeople && (
-                <p className="mt-2 text-xs font-bold text-rose-700">
-                  Debes seleccionar minimo {minimumPeople} persona{minimumPeople === 1 ? "" : "s"} en precios.
+                <p className="mt-2 text-xs font-bold text-rose-200">
+                  You must select at least {minimumPeople} traveler{minimumPeople === 1 ? "" : "s"} in pricing.
                 </p>
               )}
               {exceedsMaximumPeople ? (
-                <p className="mt-2 text-xs font-bold text-rose-700">{maxPeopleExceededMessage}</p>
+                <p className="mt-2 text-xs font-bold text-rose-200">{maxPeopleExceededMessage}</p>
               ) : null}
               <div className="mt-3 space-y-3">
                 {visiblePriceOptions.map((option) => {
@@ -1388,20 +1388,20 @@ function ReservarPageContent({
                     key={option.id}
                     className={`flex items-center justify-between rounded-lg border px-3 py-2 transition ${
                       isSelected
-                        ? "border-emerald-300 bg-emerald-50"
-                        : "border-slate-200 bg-white"
+                        ? "border-[var(--brand-gold)]/40 bg-[rgba(250,178,79,0.12)]"
+                        : "border-white/10 bg-[#1c2230]"
                     }`}
                   >
                     <div>
-                      <p className="font-bold text-slate-900">{option.name}</p>
-                      <p className={`text-sm ${option.isFree || option.price === 0 ? "font-bold text-emerald-700" : "font-semibold text-amber-700"}`}>
-                        {formatOptionPrice(option)} por pers.
+                      <p className="font-bold text-white">{option.name}</p>
+                      <p className={`text-sm ${option.isFree || option.price === 0 ? "font-bold text-emerald-300" : "font-semibold text-[var(--brand-gold)]"}`}>
+                        {formatOptionPrice(option)} per traveler
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        className="rounded border border-slate-300 bg-white px-2 py-1 font-bold text-slate-700 hover:border-emerald-300"
+                        className="rounded border border-white/20 bg-[#11161d] px-2 py-1 font-bold text-slate-200 hover:border-[var(--brand-gold)]/45"
                         onClick={() =>
                           setPriceQuantities((prev) => ({
                             ...prev,
@@ -1411,10 +1411,10 @@ function ReservarPageContent({
                       >
                         -
                       </button>
-                      <span className={`w-8 text-center font-extrabold ${isSelected ? "text-emerald-800" : "text-slate-700"}`}>{quantity}</span>
+                      <span className={`w-8 text-center font-extrabold ${isSelected ? "text-[var(--brand-gold)]" : "text-slate-300"}`}>{quantity}</span>
                       <button
                         type="button"
-                        className="rounded border border-slate-300 bg-white px-2 py-1 font-bold text-slate-700 hover:border-emerald-300"
+                        className="rounded border border-white/20 bg-[#11161d] px-2 py-1 font-bold text-slate-200 hover:border-[var(--brand-gold)]/45"
                         onClick={() => handleIncreaseQuantity(option.id)}
                       >
                         +
@@ -1425,67 +1425,67 @@ function ReservarPageContent({
               </div>
             </div>
 
-            <div className="mt-4 border-t border-slate-200 pt-4">
-              <p className="text-sm text-slate-600">Total:</p>
-              <p className="text-3xl font-black text-emerald-800">{formatCurrencyUSD(total)}</p>
+            <div className="mt-4 border-t border-white/10 pt-4">
+              <p className="text-sm text-slate-300">Total:</p>
+              <p className="text-3xl font-black text-[var(--brand-gold)]">{formatCurrencyUSD(total)}</p>
             </div>
 
             <button
               type="button"
               onClick={openContactStep}
               disabled={!hasSelectionStepCompleted || isRedirectingToConfirmation}
-              className="mt-4 w-full rounded-lg bg-emerald-700 px-4 py-3 font-extrabold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="mt-4 w-full rounded-lg bg-[var(--brand-gold)] px-4 py-3 font-extrabold text-[#11151c] transition hover:brightness-105 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-slate-400"
             >
-              Ir a informacion de contacto
+              Go to contact details
             </button>
 
             {stepError?.step === "seleccion" ? (
-              <p className="mt-4 whitespace-pre-line rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{stepError.message}</p>
+              <p className="mt-4 whitespace-pre-line rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm font-semibold text-rose-200">{stepError.message}</p>
             ) : null}
             </>
             )}
           </article>
 
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <article className="rounded-2xl border border-white/10 bg-[#1c2230]/92 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.24)]">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-extrabold text-slate-900">Paso 2: Datos de contacto</h2>
+              <h2 className="text-xl font-extrabold text-white">Step 2: Contact details</h2>
               <button
                 type="button"
-                className={`rounded-full px-3 py-1 text-xs font-bold ${step === "contacto" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}`}
+                className={`rounded-full px-3 py-1 text-xs font-bold ${step === "contacto" ? "bg-[var(--brand-gold)] text-[#11151c]" : "bg-white/10 text-slate-300"}`}
                 onClick={openContactStep}
               >
-                Contacto
+                Contact
               </button>
             </div>
 
             {step === "contacto" && (
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">Nombre</label>
+                  <label className="mb-1 block text-sm font-semibold text-slate-300">First name</label>
                   <input
-                    className="h-12 w-full rounded-lg border border-slate-300 px-3"
-                    placeholder="Nombre"
+                    className="h-12 w-full rounded-lg border border-white/15 bg-[#171c24] px-3 text-slate-100 placeholder:text-slate-500"
+                    placeholder="First name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">Apellido</label>
+                  <label className="mb-1 block text-sm font-semibold text-slate-300">Last name</label>
                   <input
-                    className="h-12 w-full rounded-lg border border-slate-300 px-3"
-                    placeholder="Apellido"
+                    className="h-12 w-full rounded-lg border border-white/15 bg-[#171c24] px-3 text-slate-100 placeholder:text-slate-500"
+                    placeholder="Last name"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">Correo electronico</label>
+                  <label className="mb-1 block text-sm font-semibold text-slate-300">Email address</label>
                   <input
                     type="email"
-                    className="h-12 w-full rounded-lg border border-slate-300 px-3"
-                    placeholder="Correo electronico"
+                    className="h-12 w-full rounded-lg border border-white/15 bg-[#171c24] px-3 text-slate-100 placeholder:text-slate-500"
+                    placeholder="Email address"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
@@ -1493,14 +1493,14 @@ function ReservarPageContent({
                 </div>
                 <div className="md:col-span-2 grid gap-2 sm:grid-cols-[1.2fr_1.8fr]">
                   <div>
-                    <label className="mb-1 block text-sm font-semibold text-slate-700">Codigo de pais</label>
+                    <label className="mb-1 block text-sm font-semibold text-slate-300">Country code</label>
                     <select
-                      className="h-12 w-full rounded-lg border border-slate-300 bg-white px-3"
+                      className="h-12 w-full rounded-lg border border-white/15 bg-[#171c24] px-3 text-slate-100"
                       value={phoneCountryDialCode}
                       onChange={(e) => setPhoneCountryDialCode(e.target.value)}
                       disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
                     >
-                      <option value="">Selecciona un pais</option>
+                      <option value="">Select a country</option>
                       {phoneCountryOptions.map((option) => (
                         <option key={`${option.code}-${option.dialCode}`} value={option.dialCode}>
                           {option.name} ({option.dialCode})
@@ -1509,10 +1509,10 @@ function ReservarPageContent({
                     </select>
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-semibold text-slate-700">Telefono</label>
+                    <label className="mb-1 block text-sm font-semibold text-slate-300">Phone</label>
                     <input
-                      className="h-12 w-full rounded-lg border border-slate-300 px-3"
-                      placeholder="Telefono"
+                      className="h-12 w-full rounded-lg border border-white/15 bg-[#171c24] px-3 text-slate-100 placeholder:text-slate-500"
+                      placeholder="Phone"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
@@ -1520,10 +1520,10 @@ function ReservarPageContent({
                   </div>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">Hotel o lugar de hospedaje</label>
+                  <label className="mb-1 block text-sm font-semibold text-slate-300">Hotel or accommodation</label>
                   <input
-                    className="h-12 w-full rounded-lg border border-slate-300 px-3"
-                    placeholder="Hotel o lugar de hospedaje"
+                    className="h-12 w-full rounded-lg border border-white/15 bg-[#171c24] px-3 text-slate-100 placeholder:text-slate-500"
+                    placeholder="Hotel or accommodation"
                     value={hotel}
                     onChange={(e) => setHotel(e.target.value)}
                     disabled={!meetsMinimumPeople || isRedirectingToConfirmation}
@@ -1534,34 +1534,34 @@ function ReservarPageContent({
                   type="button"
                   onClick={openPaymentStep}
                   disabled={!canContinueToPay}
-                  className="md:col-span-2 mt-2 rounded-lg bg-emerald-700 px-4 py-3 font-extrabold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="md:col-span-2 mt-2 rounded-lg bg-[var(--brand-gold)] px-4 py-3 font-extrabold text-[#11151c] transition hover:brightness-105 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-slate-400"
                 >
-                  Continuar a pago
+                  Continue to payment
                 </button>
               </div>
             )}
 
             {stepError?.step === "contacto" ? (
-              <p className="mt-4 whitespace-pre-line rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{stepError.message}</p>
+              <p className="mt-4 whitespace-pre-line rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm font-semibold text-rose-200">{stepError.message}</p>
             ) : null}
           </article>
 
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <article className="rounded-2xl border border-white/10 bg-[#1c2230]/92 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.24)]">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-extrabold text-slate-900">Paso 3: Metodo de pago</h2>
+              <h2 className="text-xl font-extrabold text-white">Step 3: Payment method</h2>
               <button
                 type="button"
-                className={`rounded-full px-3 py-1 text-xs font-bold ${step === "pago" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600"}`}
+                className={`rounded-full px-3 py-1 text-xs font-bold ${step === "pago" ? "bg-[var(--brand-gold)] text-[#11151c]" : "bg-white/10 text-slate-300"}`}
                 onClick={openPaymentStep}
                 disabled={isConfirmingReservation}
               >
-                Pago
+                Payment
               </button>
             </div>
 
             {step === "pago" && !isConfirmingReservation && (
               <form onSubmit={handleReserve} className="mt-4 space-y-3">
-                {["Tarjeta de Credito o Debito (ONVO)", "SINPE Movil"].map((method) => (
+                {["Credit or Debit Card (ONVO)", "SINPE Mobile"].map((method) => (
                   <button
                     type="button"
                     key={method}
@@ -1569,8 +1569,8 @@ function ReservarPageContent({
                     disabled={isRedirectingToConfirmation || isConfirmingReservation}
                     className={`w-full rounded-lg border px-4 py-3 text-left font-semibold transition ${
                       payMethod === method
-                        ? "border-emerald-700 bg-emerald-50 text-emerald-900"
-                        : "border-slate-300 bg-white text-slate-700 hover:border-emerald-300"
+                        ? "border-[var(--brand-gold)]/40 bg-[rgba(250,178,79,0.14)] text-white"
+                        : "border-white/15 bg-[#171c24] text-slate-200 hover:border-[var(--brand-gold)]/40"
                     }`}
                   >
                     {method}
@@ -1578,16 +1578,16 @@ function ReservarPageContent({
                 ))}
 
                 {isSinpeMobileMethod ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-sm font-extrabold text-amber-900">Pago por SINPE Movil</p>
-                    <p className="mt-1 text-sm text-amber-900">
-                      Envia el total de la orden a <span className="font-extrabold">8888-9999</span> y sube el comprobante para completar la reserva.
+                  <div className="rounded-xl border border-amber-500/30 bg-[rgba(250,178,79,0.1)] p-4">
+                    <p className="text-sm font-extrabold text-amber-200">SINPE Mobile payment</p>
+                    <p className="mt-1 text-sm text-amber-100">
+                      Send the total amount to <span className="font-extrabold">8888-9999</span> and upload the receipt to complete your booking.
                     </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800">
-                      Total a transferir: <span className="font-extrabold text-emerald-800">{formatCurrencyUSD(total)}</span>
+                    <p className="mt-1 text-sm font-semibold text-slate-200">
+                      Total to transfer: <span className="font-extrabold text-[var(--brand-gold)]">{formatCurrencyUSD(total)}</span>
                     </p>
                     <div className="mt-3">
-                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-600">Subir comprobante</label>
+                      <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-300">Upload receipt</label>
                       <input
                         type="file"
                         accept="image/*"
@@ -1596,11 +1596,11 @@ function ReservarPageContent({
                           setSinpeReceiptFile(nextFile);
                           setSinpeReceiptUrl("");
                         }}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                        className="w-full rounded-lg border border-white/15 bg-[#171c24] px-3 py-2 text-sm text-slate-200"
                         required
                       />
                       {sinpeReceiptFile ? (
-                        <p className="mt-2 text-xs font-semibold text-emerald-700">Comprobante listo: {sinpeReceiptFile.name}</p>
+                        <p className="mt-2 text-xs font-semibold text-emerald-300">Receipt ready: {sinpeReceiptFile.name}</p>
                       ) : null}
                     </div>
                   </div>
@@ -1619,55 +1619,55 @@ function ReservarPageContent({
                     isRedirectingToConfirmation ||
                     (isSinpeMobileMethod && !sinpeReceiptFile && !sinpeReceiptUrl)
                   }
-                  className="mt-3 w-full rounded-lg bg-amber-400 px-4 py-3 text-base font-extrabold text-slate-900 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="mt-3 w-full rounded-lg bg-[var(--brand-gold)] px-4 py-3 text-base font-extrabold text-[#11151c] transition hover:brightness-105 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-slate-400"
                 >
                   {isRedirectingToConfirmation
-                    ? "Redirigiendo..."
+                    ? "Redirecting..."
                     : isUploadingSinpeReceipt
-                      ? "Subiendo comprobante..."
+                      ? "Uploading receipt..."
                       : isCreatingPayment
-                        ? "Preparando pago..."
+                        ? "Preparing payment..."
                         : isSinpeMobileMethod
-                          ? "Enviar reserva con comprobante SINPE"
-                          : "Confirmar reserva y pagar"}
+                          ? "Submit booking with SINPE receipt"
+                          : "Confirm booking and pay"}
                 </button>
 
                 {!isSinpeMobileMethod ? (
-                  <div id="onvo-checkout-container" className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3" />
+                  <div id="onvo-checkout-container" className="mt-4 rounded-lg border border-white/10 bg-[#171c24] p-3" />
                 ) : null}
               </form>
             )}
 
             {step === "pago" && isConfirmingReservation ? (
-              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                <p className="text-sm font-semibold text-emerald-800">Pago recibido. Confirmando reserva...</p>
+              <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
+                <p className="text-sm font-semibold text-emerald-200">Payment received. Confirming booking...</p>
               </div>
             ) : null}
 
             {stepError?.step === "pago" ? (
-              <p className="mt-4 whitespace-pre-line rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{stepError.message}</p>
+              <p className="mt-4 whitespace-pre-line rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm font-semibold text-rose-200">{stepError.message}</p>
             ) : null}
 
             {status && !isConfirmingReservation && (
-              <p className="mt-4 whitespace-pre-line rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{status}</p>
+              <p className="mt-4 whitespace-pre-line rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm font-semibold text-emerald-200">{status}</p>
             )}
           </article>
         </div>
 
-        <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-6">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Resumen de compra</p>
+        <aside className="h-fit rounded-2xl border border-white/10 bg-[#1c2230]/92 p-5 shadow-[0_12px_32px_rgba(0,0,0,0.24)] lg:sticky lg:top-6">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Purchase summary</p>
 
-          <div className="mt-4 flex gap-3 rounded-xl border border-slate-200 p-3">
+          <div className="mt-4 flex gap-3 rounded-xl border border-white/10 bg-[#171c24] p-3">
             <img src={tour.image} alt={tour.title} className="h-16 w-20 rounded object-cover" />
             <div>
-              <p className="text-sm font-extrabold text-slate-900">{tour.title}</p>
-              {selectedPackage && <p className="text-xs font-semibold text-emerald-700">Paquete: {selectedPackage.title}</p>}
-              <p className="text-xs text-slate-600">{selectedDate ? new Date(selectedDate.date).toLocaleDateString("es-ES") : "Fecha por confirmar"}</p>
-              <p className="text-xs text-slate-600">{normalizeTime24(effectiveSelectedTime) ? formatTimeLabel(effectiveSelectedTime) : effectiveSelectedTime} | {totalPeople} pers.</p>
+              <p className="text-sm font-extrabold text-white">{tour.title}</p>
+              {selectedPackage && <p className="text-xs font-semibold text-[var(--brand-gold)]">Package: {selectedPackage.title}</p>}
+              <p className="text-xs text-slate-300">{selectedDate ? new Date(selectedDate.date).toLocaleDateString("en-US") : "Date to be confirmed"}</p>
+              <p className="text-xs text-slate-300">{normalizeTime24(effectiveSelectedTime) ? formatTimeLabel(effectiveSelectedTime) : effectiveSelectedTime} | {totalPeople} travelers</p>
             </div>
           </div>
 
-          <div className="mt-3 space-y-1 text-xs text-slate-600">
+          <div className="mt-3 space-y-1 text-xs text-slate-300">
             {visiblePriceOptions
               .filter((option) => (normalizedPriceQuantities[option.id] ?? 0) > 0)
               .map((option) => (
@@ -1677,21 +1677,21 @@ function ReservarPageContent({
               ))}
           </div>
 
-          <div className="mt-4 space-y-2 text-sm text-slate-700">
+          <div className="mt-4 space-y-2 text-sm text-slate-200">
             <div className="flex items-center justify-between">
               <span>Subtotal</span>
-              <span className="font-semibold">{formatCurrencyUSD(subtotal)}</span>
+              <span className="font-semibold text-white">{formatCurrencyUSD(subtotal)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span>Tarifa de servicio (6%)</span>
-              <span className="font-semibold">{formatCurrencyUSD(serviceFee)}</span>
+              <span>Service fee (6%)</span>
+              <span className="font-semibold text-white">{formatCurrencyUSD(serviceFee)}</span>
             </div>
           </div>
 
-          <div className="mt-4 border-t border-slate-200 pt-4">
+          <div className="mt-4 border-t border-white/10 pt-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-slate-900">Total</span>
-              <span className="text-2xl font-black text-emerald-800">{formatCurrencyUSD(total)}</span>
+              <span className="text-sm font-bold text-slate-100">Total</span>
+              <span className="text-2xl font-black text-[var(--brand-gold)]">{formatCurrencyUSD(total)}</span>
             </div>
           </div>
 

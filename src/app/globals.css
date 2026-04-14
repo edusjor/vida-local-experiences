@@ -1,34 +1,45 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a1a;
-  --brand-green: #1f8a4d;
-  --brand-green-dark: #0f5a34;
-  --brand-gold: #f6b118;
-  --brand-cream: #f6f8ee;
+  --background: #1a1e26;
+  --foreground: #ffffff;
+  --surface: #202630;
+  --surface-soft: #27303c;
+  --brand-green: #1c5b38;
+  --brand-green-dark: #0f2f1f;
+  --brand-gold: #fab24f;
+  --brand-gold-dark: #db9331;
+  --brand-sky: #6dbce4;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-nunito);
+  --font-sans: var(--font-nunito-sans);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at 10% 5%, rgba(109, 188, 228, 0.12), transparent 26%),
+    radial-gradient(circle at 92% 3%, rgba(250, 178, 79, 0.14), transparent 25%),
+    linear-gradient(180deg, #1a1e26 0%, #161b23 100%);
   color: var(--foreground);
-  font-family: var(--font-nunito), sans-serif;
+  font-family: var(--font-nunito-sans), sans-serif;
 }
 
 .site-header {
-  background: linear-gradient(120deg, var(--brand-green-dark), var(--brand-green));
-  box-shadow: 0 12px 32px rgba(12, 67, 40, 0.25);
+  background: rgba(26, 30, 38, 0.86);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(18px);
 }
 
 .hero-wrap {
-  background: #0f5a34;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(250, 178, 79, 0.2), transparent 28%),
+    radial-gradient(circle at 84% 12%, rgba(109, 188, 228, 0.14), transparent 22%),
+    linear-gradient(180deg, #141820 0%, #1a1e26 100%);
 }
 
 .hero-slideshow {
@@ -51,7 +62,9 @@ body {
 .hero-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(12, 67, 40, 0.8), rgba(15, 90, 52, 0.34));
+  background:
+    linear-gradient(to top, rgba(7, 10, 15, 0.92), rgba(12, 18, 25, 0.4)),
+    linear-gradient(120deg, rgba(15, 47, 31, 0.5), rgba(250, 178, 79, 0.18));
 }
 
 @keyframes hero-slide-zoom {
@@ -93,15 +106,17 @@ body {
 }
 
 .script-title {
-  font-family: var(--font-kaushan), cursive;
+  font-family: var(--font-nunito-sans), sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.05em;
 }
 
 .section-band {
-  background: linear-gradient(120deg, #f4faee, #e8f7ef);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)), var(--background);
 }
 
 .jungle-band {
-  background-image: linear-gradient(to right, rgba(16, 94, 53, 0.9), rgba(25, 135, 84, 0.84));
+  background-image: linear-gradient(135deg, rgba(15, 47, 31, 0.98), rgba(28, 91, 56, 0.9) 58%, rgba(250, 178, 79, 0.18));
 }
 
 .dual-range-input {
@@ -123,8 +138,8 @@ body {
   height: 20px;
   border-radius: 999px;
   background: #ffffff;
-  border: 3px solid #22a06b;
-  box-shadow: 0 4px 10px rgba(22, 128, 72, 0.24);
+  border: 3px solid var(--brand-gold);
+  box-shadow: 0 4px 10px rgba(250, 178, 79, 0.3);
   margin-top: -6px;
   pointer-events: auto;
   cursor: pointer;
@@ -140,8 +155,8 @@ body {
   height: 20px;
   border-radius: 999px;
   background: #ffffff;
-  border: 3px solid #22a06b;
-  box-shadow: 0 4px 10px rgba(22, 128, 72, 0.24);
+  border: 3px solid var(--brand-gold);
+  box-shadow: 0 4px 10px rgba(250, 178, 79, 0.3);
   pointer-events: auto;
   cursor: pointer;
 }
@@ -172,11 +187,12 @@ body {
   justify-content: center;
   padding: 1rem;
   border-radius: 0.95rem;
-  border: 1px solid #dce4ec;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   background:
-    linear-gradient(180deg, #ffffff, #f7fafc),
-    radial-gradient(circle at 20% 18%, rgba(15, 23, 42, 0.06), transparent 65%);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
+    radial-gradient(circle at 20% 18%, rgba(250, 178, 79, 0.08), transparent 65%),
+    #141920;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
 @keyframes providers-marquee {

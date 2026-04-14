@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import nodemailer from 'nodemailer';
+import { siteConfig } from '../../lib/siteConfig';
 
 type ContactPayload = {
   nombre?: string;
@@ -32,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const smtpUser = process.env.SMTP_USER;
   const smtpPass = process.env.SMTP_PASS;
   const smtpFrom = process.env.SMTP_FROM || smtpUser;
-  const toEmail = process.env.CONTACT_TO_EMAIL || 'atencionalcliente@guapileslineatours.com';
+  const toEmail = process.env.CONTACT_TO_EMAIL || siteConfig.supportEmail;
 
   if (!smtpHost || !smtpUser || !smtpPass || !smtpFrom || !Number.isFinite(smtpPort)) {
     return res.status(500).json({
@@ -55,9 +56,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       from: smtpFrom,
       to: toEmail,
       replyTo: email,
-      subject: `[Contacto Web] ${asunto}`,
+      subject: `[${siteConfig.brandName}] ${asunto}`,
       text: [
-        'Nuevo mensaje de contacto (sitio web)',
+        `Nuevo mensaje de contacto (${siteConfig.brandName})`,
         '',
         `Nombre: ${nombre}`,
         `Correo: ${email}`,
@@ -70,11 +71,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         'Responder directamente a este correo usara Reply-To del cliente.',
       ].join('\n'),
       html: `
-        <div style="margin:0;padding:24px;background:#f3f6f8;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+        <div style="margin:0;padding:24px;background:#12171e;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:720px;margin:0 auto;border-collapse:collapse;">
             <tr>
-              <td style="background:linear-gradient(135deg,#065f46 0%,#0f766e 100%);padding:22px 24px;border-radius:14px 14px 0 0;">
-                <p style="margin:0 0 6px 0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#d1fae5;">Formulario Web</p>
+              <td style="background:linear-gradient(135deg,#0f2f1f 0%,#1c5b38 100%);padding:22px 24px;border-radius:14px 14px 0 0;">
+                <p style="margin:0 0 6px 0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#fde1b5;">${siteConfig.brandName}</p>
                 <h2 style="margin:0;font-size:24px;line-height:1.2;color:#ffffff;">Nuevo mensaje de contacto</h2>
               </td>
             </tr>

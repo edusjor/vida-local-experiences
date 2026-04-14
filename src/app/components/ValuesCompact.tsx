@@ -20,11 +20,11 @@ export default function ValuesCompact({ items }: ValuesCompactProps) {
   const current = safeItems[Math.min(activeIndex, safeItems.length - 1)];
 
   return (
-    <article className="mt-8 rounded-3xl border border-slate-200 bg-[#f7fbfb] p-5 shadow-sm md:p-6">
+    <article className="mt-8 rounded-3xl border border-white/10 bg-[#202630]/92 p-5 shadow-sm md:p-6">
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr] lg:items-center">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-700">Valores</p>
-          <h3 className="mt-2 text-3xl font-black text-slate-900">Nuestros Valores</h3>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-[var(--brand-gold)]">Valores</p>
+          <h3 className="mt-2 text-3xl font-black text-white">Nuestros Valores</h3>
         </div>
       </div>
 
@@ -38,8 +38,8 @@ export default function ValuesCompact({ items }: ValuesCompactProps) {
               onClick={() => setActiveIndex(idx)}
               className={`rounded-full border px-4 py-2 text-sm font-extrabold transition-colors ${
                 isActive
-                  ? "border-emerald-600 bg-emerald-600 text-white"
-                  : "border-slate-300 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
+                  ? "border-[var(--brand-gold)] bg-[var(--brand-gold)] text-[#11151c]"
+                  : "border-white/10 bg-white/5 text-slate-200 hover:border-[var(--brand-gold)] hover:text-white"
               }`}
               aria-pressed={isActive}
             >
@@ -49,9 +49,9 @@ export default function ValuesCompact({ items }: ValuesCompactProps) {
         })}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
-        <p className="text-xl font-black text-slate-900">{current.title}</p>
-        <p className="mt-2 text-base leading-relaxed text-slate-600">{current.text}</p>
+      <div className="mt-4 rounded-2xl border border-white/10 bg-[#171c24] p-4 md:p-5">
+        <p className="text-xl font-black text-white">{current.title}</p>
+        <p className="mt-2 text-base leading-relaxed text-slate-300">{current.text}</p>
       </div>
     </article>
   );

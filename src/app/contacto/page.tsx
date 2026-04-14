@@ -1,8 +1,8 @@
 "use client";
 
-import React from 'react';
 import Link from 'next/link';
 import ContactUnifiedForm from '../components/ContactUnifiedForm';
+import { siteConfig } from '../../lib/siteConfig';
 
 function PhoneIcon() {
   return (
@@ -64,47 +64,48 @@ export default function ContactoPage() {
     <div>
       <section className="jungle-band py-12 text-white">
         <div className="mx-auto max-w-6xl px-4">
-          <h2 className="text-center text-4xl font-extrabold">Contactanos directamente</h2>
+          <p className="text-center text-xs font-black uppercase tracking-[0.24em] text-[var(--brand-gold)]">Contact</p>
+          <h2 className="mt-3 text-center text-4xl font-extrabold">Let's talk about your trip to Costa Rica</h2>
           <div className="mt-8 grid gap-4 md:grid-cols-2">
-            <article className="rounded-2xl border border-white/20 bg-white/10 p-6 backdrop-blur-sm">
-              <h3 className="text-2xl font-extrabold">Canales de atencion</h3>
+            <article className="rounded-3xl border border-white/10 bg-white/10 p-6 backdrop-blur-sm">
+              <h3 className="text-2xl font-extrabold">Contact channels</h3>
               <div className="mt-4 space-y-3 text-sm font-semibold text-emerald-50">
-                <p className="flex items-center gap-2"><PhoneIcon /> +506 6015 9782 / +506 7154 6738</p>
-                <p className="flex items-center gap-2"><MailIcon /> atencionalcliente@guapileslineatours.com</p>
-                <p className="flex items-center gap-2"><ClockIcon /> Lunes a Viernes, 8:00 am a 5:00 pm</p>
-                <p className="flex items-center gap-2"><MapPinIcon /> Costa Rica, Limon, Pococi, La Colonia</p>
+                <p className="flex items-center gap-2"><PhoneIcon /> WhatsApp {siteConfig.whatsappDisplay}</p>
+                <p className="flex items-center gap-2"><MailIcon /> {siteConfig.supportEmail}</p>
+                <p className="flex items-center gap-2"><ClockIcon /> Personalized support to define route, pace, and interests</p>
+                <p className="flex items-center gap-2"><MapPinIcon /> {siteConfig.location}</p>
               </div>
             </article>
 
-            <article className="rounded-2xl border border-white/20 bg-white/10 p-6 backdrop-blur-sm">
-              <h3 className="text-2xl font-extrabold">Contactanos por WhatsApp</h3>
+            <article className="rounded-3xl border border-white/10 bg-white/10 p-6 backdrop-blur-sm">
+              <h3 className="text-2xl font-extrabold">Personalized planning</h3>
               <p className="mt-3 text-emerald-50">
-                Escribenos al +506 6015 9782 y te ayudamos a elegir tour, fechas y metodo de pago en minutos.
+                Tell us what you would love to experience in Costa Rica, and we will help you build a private, authentic journey aligned with your trip.
               </p>
               <a
-                href="https://wa.me/50660159782"
+                href={siteConfig.whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-5 inline-block rounded-lg bg-amber-400 px-5 py-2 text-sm font-extrabold text-slate-900 transition hover:bg-amber-300"
+                className="mt-5 inline-block rounded-full bg-[var(--brand-gold)] px-5 py-2.5 text-sm font-extrabold text-[#11151c] transition hover:brightness-105"
               >
-                Abrir WhatsApp
+                Open WhatsApp
               </a>
             </article>
           </div>
         </div>
       </section>
 
-      <section id="centro-contacto" className="bg-white py-12">
+      <section id="centro-contacto" className="section-band py-12">
         <div className="mx-auto max-w-6xl px-4">
-          <h2 className="text-center text-3xl font-extrabold text-emerald-900">Listo para planear tu aventura</h2>
+          <h2 className="text-center text-3xl font-extrabold text-white">When you are ready, we will help you plan it</h2>
           <div className="mt-6 grid gap-6 lg:grid-cols-[1.35fr_0.85fr]">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+            <div className="rounded-[28px] border border-white/10 bg-[#202630]/92 p-5 shadow-sm">
               <ContactUnifiedForm className="grid gap-4 md:grid-cols-2" />
             </div>
 
-            <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <aside className="overflow-hidden rounded-[28px] border border-white/10 bg-[#202630]/92 shadow-sm">
               <iframe
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d4882.188570334864!2d-83.8047022!3d10.2454627!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x8fa0b9c803e1fc55%3A0x4b43d6084e269201!2sLINEA%20TOURS%20-%20Agencia%20de%20Viajes!5e1!3m2!1ses!2scr!4v1774907290615!5m2!1ses!2scr"
+                src={siteConfig.mapsEmbedUrl}
                 width="400"
                 height="300"
                 style={{ border: 0 }}
@@ -112,13 +113,13 @@ export default function ContactoPage() {
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
                 className="h-56 w-full"
-                title="Mapa de LINEA TOURS"
+                title="Map of Manuel Antonio"
               />
-              <div className="space-y-2 p-4 text-sm text-slate-700">
-                <p className="flex items-center gap-2"><MapPinIcon /> Guapiles, Limon, Costa Rica</p>
-                <p className="flex items-center gap-2"><ShieldIcon /> Operadores certificados y respaldo local</p>
-                <p className="flex items-center gap-2"><GlobeIcon /> Experiencias rurales, playa y aventura</p>
-                <Link href="/contacto" className="mt-2 inline-block font-extrabold text-emerald-700">Ver contacto completo</Link>
+              <div className="space-y-2 p-5 text-sm text-slate-200">
+                <p className="flex items-center gap-2"><MapPinIcon /> {siteConfig.location}</p>
+                <p className="flex items-center gap-2"><ShieldIcon /> Private experiences with local guidance</p>
+                <p className="flex items-center gap-2"><GlobeIcon /> Nature, culture, and community at the heart of your journey</p>
+                <Link href="/tours" className="mt-2 inline-block font-extrabold text-[var(--brand-gold)]">Explore experiences</Link>
               </div>
             </aside>
           </div>

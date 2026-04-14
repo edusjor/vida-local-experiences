@@ -44,10 +44,6 @@ export default function FeaturedToursSlice({ tours }: Props) {
     return () => clearInterval(timer);
   }, [tours.length]);
 
-  useEffect(() => {
-    setStartIndex(0);
-  }, [tours.length]);
-
   const visibleTours = useMemo(() => {
     if (tours.length === 0) return [] as FeaturedTour[];
 
@@ -60,39 +56,57 @@ export default function FeaturedToursSlice({ tours }: Props) {
     <div>
       <div className="mt-8 grid gap-6 md:grid-cols-3">
         {visibleTours.map((item, idx) => (
-          <article key={`${item.id}-${idx}-${startIndex}`} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-xl shadow-slate-300/40">
-            <div className="relative">
-              <img src={item.image} alt={item.title} className="h-44 w-full object-cover" />
-              {item.featured && (
-                <span className="absolute left-3 top-3 rounded-full bg-amber-400 px-3 py-1 text-xs font-black text-slate-900">Destacado</span>
-              )}
-            </div>
-            <div className="flex flex-1 flex-col p-5">
-              <p className="text-xs font-extrabold uppercase tracking-wide text-emerald-700">{item.categoryName || "Tour"}</p>
-              <h3 className="mt-1 text-base font-bold leading-snug text-slate-900">{item.title}</h3>
-              <p className="mt-2 line-clamp-3 whitespace-pre-line text-slate-600">{item.description}</p>
-
-              <div className="mt-3 min-h-10">
-                {item.location && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                    <MapPinIcon />
-                    {item.location}
+          <article key={`${item.id}-${idx}-${startIndex}`} className="group relative isolate min-h-[340px] overflow-hidden rounded-[28px] border border-white/10 bg-[#11161d] shadow-[0_24px_56px_rgba(0,0,0,0.24)]">
+            <img
+              src={item.image}
+              alt={item.title}
+              className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(109,188,228,0.18),transparent_26%),linear-gradient(180deg,rgba(7,10,15,0.14)_0%,rgba(7,10,15,0.28)_24%,rgba(7,10,15,0.74)_68%,rgba(7,10,15,0.92)_100%)]" />
+            <div className="relative z-10 flex h-full flex-col p-5">
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full bg-[rgba(28,91,56,0.92)] px-3 py-1 text-xs font-black text-white shadow-lg shadow-black/10">
+                  {item.categoryName || "Tour"}
+                </span>
+                <span className="rounded-full border border-white/12 bg-[rgba(37,44,57,0.82)] px-3 py-1 text-xs font-black text-white backdrop-blur-sm">
+                  Private
+                </span>
+                {item.featured ? (
+                  <span className="rounded-full border border-[var(--brand-gold)]/40 bg-[rgba(250,178,79,0.16)] px-3 py-1 text-xs font-black text-[var(--brand-gold)] backdrop-blur-sm">
+                    Featured
                   </span>
-                )}
+                ) : null}
               </div>
 
-              <div className="mt-auto flex items-center justify-between gap-3 pt-4">
-                {item.priceLabel ? (
-                  <span className="text-3xl font-black text-emerald-600">{item.priceLabel}</span>
-                ) : (
-                  <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Solo informativo</span>
-                )}
-              <Link
-                href={getTourHref(item)}
-                className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-extrabold text-slate-900 transition hover:bg-amber-300"
-              >
-                Ver detalles
-              </Link>
+              <div className="mt-auto">
+                <h3 className="max-w-[18ch] text-[1.7rem] font-black leading-[1.05] text-white drop-shadow-[0_4px_18px_rgba(0,0,0,0.35)]">
+                  {item.title}
+                </h3>
+
+                {item.location ? (
+                  <p className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-slate-200">
+                    <MapPinIcon />
+                    {item.location}
+                  </p>
+                ) : null}
+
+                <p className="mt-2 line-clamp-2 max-w-[28ch] text-sm leading-relaxed text-slate-300/95">{item.description}</p>
+
+                <div className="mt-5 flex items-end justify-between gap-3">
+                  <Link
+                    href={getTourHref(item)}
+                    className="rounded-full bg-[var(--brand-gold)] px-4 py-2.5 text-sm font-extrabold text-[#11151c] transition hover:brightness-105"
+                  >
+                    View tour
+                  </Link>
+                  {item.priceLabel ? (
+                    <span className="text-3xl font-black text-white drop-shadow-[0_4px_18px_rgba(0,0,0,0.35)]">{item.priceLabel}</span>
+                  ) : (
+                    <span className="rounded-full border border-white/12 bg-[rgba(22,26,34,0.72)] px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-200 backdrop-blur-sm">
+                      Info only
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </article>
@@ -106,8 +120,8 @@ export default function FeaturedToursSlice({ tours }: Props) {
               key={`dot-${tour.id}-${idx}`}
               type="button"
               onClick={() => setStartIndex(idx)}
-              aria-label={`Mostrar destacados desde ${idx + 1}`}
-              className={`h-2.5 w-2.5 rounded-full transition ${startIndex === idx ? "bg-amber-300" : "bg-white/40 hover:bg-white/70"}`}
+              aria-label={`Show featured tours from ${idx + 1}`}
+              className={`h-2.5 w-2.5 rounded-full transition ${startIndex === idx ? "bg-[var(--brand-gold)]" : "bg-white/25 hover:bg-white/55"}`}
             />
           ))}
         </div>

@@ -73,7 +73,7 @@ function normalizePriceOptions(items: unknown): TourPriceOption[] {
 }
 
 function formatPriceLabel(option: TourPriceOption): string {
-  if (option.isFree || option.price === 0) return "Gratis";
+  if (option.isFree || option.price === 0) return "Free";
   return `$${option.price.toFixed(2)}`;
 }
 
@@ -128,7 +128,7 @@ function buildNormalizedTourPackages(raw: Partial<Tour>): TourPackage[] {
     return [
       {
         id: "package-main",
-        title: "Paquete principal",
+        title: "Main package",
         description: "",
         priceOptions: legacyOptions,
       },
@@ -140,8 +140,8 @@ function buildNormalizedTourPackages(raw: Partial<Tour>): TourPackage[] {
 
 function getDurationLabel(days?: number): string {
   const parts: string[] = [];
-  if (typeof days === 'number' && days > 0) parts.push(`${days} dia(s)`);
-  return parts.length ? parts.join(' ') : 'A confirmar';
+  if (typeof days === 'number' && days > 0) parts.push(`${days} day(s)`);
+  return parts.length ? parts.join(' ') : 'To be confirmed';
 }
 
 function slugifyTourValue(value: string): string {
@@ -389,12 +389,12 @@ export default function TourDetailPage() {
 
   const nextAvailableDateLabel = useMemo(() => {
     if (calendarHasOpenAvailability) {
-      return new Date(`${todayDateKey}T00:00:00`).toLocaleDateString();
+      return new Date(`${todayDateKey}T00:00:00`).toLocaleDateString("en-US");
     }
 
     const firstFutureDateKey = availableDateKeys[0];
-    if (!firstFutureDateKey) return "Sin fechas disponibles por ahora";
-    return new Date(`${firstFutureDateKey}T00:00:00`).toLocaleDateString();
+    if (!firstFutureDateKey) return "No dates available at the moment";
+    return new Date(`${firstFutureDateKey}T00:00:00`).toLocaleDateString("en-US");
   }, [availableDateKeys, calendarHasOpenAvailability, todayDateKey]);
 
   const availableDateSet = useMemo(() => new Set(availableDateKeys), [availableDateKeys]);
@@ -416,7 +416,7 @@ export default function TourDetailPage() {
   }, [availableMonthKeys, calendarMonthKey]);
 
   const monthLabel = useMemo(() => {
-    return calendarMonth.toLocaleDateString("es-CR", { month: "long", year: "numeric" });
+    return calendarMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   }, [calendarMonth]);
 
   const calendarCells = useMemo(() => {
@@ -530,10 +530,10 @@ export default function TourDetailPage() {
   if (loading) {
     return (
       <section className="mx-auto max-w-6xl px-4 py-14">
-        <div className="mx-auto max-w-md rounded-2xl border border-emerald-200/70 bg-white/90 p-8 text-center shadow-[0_12px_32px_rgba(15,23,42,0.1)]">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600" aria-hidden="true" />
-          <p className="mt-4 text-base font-bold text-slate-800">Cargando experiencia...</p>
-          <p className="mt-1 text-sm text-slate-600">Consultando disponibilidad y detalles del tour.</p>
+        <div className="mx-auto max-w-md rounded-2xl border border-white/10 bg-[#1c2230]/95 p-8 text-center shadow-[0_12px_32px_rgba(0,0,0,0.28)]">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-[var(--brand-gold)]" aria-hidden="true" />
+          <p className="mt-4 text-base font-bold text-white">Loading experience...</p>
+          <p className="mt-1 text-sm text-slate-300">Checking availability and tour details.</p>
         </div>
       </section>
     );
@@ -542,7 +542,7 @@ export default function TourDetailPage() {
   if (!tour || !detail || !imagesForView.length) {
     return (
       <section className="mx-auto max-w-6xl px-4 py-10">
-        <p className="rounded-xl bg-white p-6 text-slate-700 shadow">No encontramos este tour de prueba.</p>
+        <p className="rounded-xl border border-white/10 bg-[#1c2230]/92 p-6 text-slate-200 shadow">We couldn't find this tour.</p>
       </section>
     );
   }
@@ -564,7 +564,7 @@ export default function TourDetailPage() {
   const reserveHref = `/tours/${encodeURIComponent(routeParam)}/reservar${selectedPackage ? `?package=${encodeURIComponent(selectedPackage.id)}${selectedAvailabilityDate ? `&date=${encodeURIComponent(selectedAvailabilityDate)}` : ""}` : selectedAvailabilityDate ? `?date=${encodeURIComponent(selectedAvailabilityDate)}` : ""}`;
 
   return (
-    <section className="relative overflow-hidden bg-[radial-gradient(circle_at_15%_10%,rgba(16,185,129,0.11),transparent_42%),radial-gradient(circle_at_90%_85%,rgba(245,158,11,0.12),transparent_38%),linear-gradient(180deg,#f8fbfa_0%,#ecf3f1_100%)]">
+    <section className="relative overflow-hidden bg-[radial-gradient(circle_at_15%_10%,rgba(109,188,228,0.1),transparent_42%),radial-gradient(circle_at_90%_85%,rgba(250,178,79,0.12),transparent_38%),linear-gradient(180deg,#121720_0%,#1A1E26_100%)]">
       <div
         className="relative w-full"
         style={{
@@ -591,11 +591,11 @@ export default function TourDetailPage() {
                 href={reserveHref}
                 className="mt-6 inline-block rounded-xl bg-amber-400 px-6 py-3 font-extrabold text-slate-900 transition hover:bg-amber-300"
               >
-                Reservar tour - {detailPricePreview.label}
+                Book tour - {detailPricePreview.label}
               </a>
             ) : (
               <p className="mt-6 inline-block rounded-xl border border-white/35 bg-white/12 px-5 py-3 text-sm font-bold text-white">
-                Este tour es informativo y no tiene reserva en linea.
+                This is an informational tour and online booking is not available.
               </p>
             )}
           </div>
@@ -608,7 +608,7 @@ export default function TourDetailPage() {
                 <button
                   key={`${img}-${index}`}
                   type="button"
-                  aria-label={`Ir al slide ${index + 1}`}
+                  aria-label={`Go to slide ${index + 1}`}
                   onClick={() => setHeroIndex(index)}
                   className={`h-2.5 w-2.5 rounded-full transition ${heroIndex === index ? "bg-white" : "bg-white/50"}`}
                 />
@@ -623,7 +623,7 @@ export default function TourDetailPage() {
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div>
           <div className="grid gap-3 md:grid-cols-[1.35fr_1fr]">
-            <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#171c24]">
               <img
                 src={imagesForView[galleryMainIndex]}
                 alt={tour.title}
@@ -634,14 +634,14 @@ export default function TourDetailPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="rounded-md bg-white/90 px-2 py-1 text-xs font-bold text-slate-800"
+                    className="rounded-md border border-white/20 bg-[#11161d]/95 px-2 py-1 text-xs font-bold text-slate-100"
                     onClick={() => setGalleryMainIndex((prev) => slideBack(prev))}
                   >
                     Prev
                   </button>
                   <button
                     type="button"
-                    className="rounded-md bg-white/90 px-2 py-1 text-xs font-bold text-slate-800"
+                    className="rounded-md border border-white/20 bg-[#11161d]/95 px-2 py-1 text-xs font-bold text-slate-100"
                     onClick={() => setGalleryMainIndex((prev) => slideNext(prev))}
                   >
                     Next
@@ -651,7 +651,7 @@ export default function TourDetailPage() {
             </div>
 
             <div className="grid gap-3">
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#171c24]">
                 <img
                   src={imagesForView[sideTopIndex]}
                   alt={`${tour.title} preview 1`}
@@ -659,7 +659,7 @@ export default function TourDetailPage() {
                   onClick={() => setLightboxIndex(sideTopIndex)}
                 />
               </div>
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#171c24]">
                 <img
                   src={imagesForView[sideBottomIndex]}
                   alt={`${tour.title} preview 2`}
@@ -670,52 +670,52 @@ export default function TourDetailPage() {
             </div>
           </div>
 
-          <article className="mt-7 rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
-            <h2 className="text-2xl font-extrabold text-slate-900">Detalles generales</h2>
-            <p className="mt-3 whitespace-pre-line leading-relaxed text-slate-700">{tour.description}</p>
+          <article className="mt-7 rounded-2xl border border-white/10 bg-[#1c2230]/92 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+            <h2 className="text-2xl font-extrabold text-white">General details</h2>
+            <p className="mt-3 whitespace-pre-line leading-relaxed text-slate-300">{tour.description}</p>
 
-            {(getDurationLabel(tour.durationDays) !== "A confirmar" || tour.guideType || tour.transport || tour.groups || [tour.zone, tour.country].filter(Boolean).length > 0 || tour.departurePoint || hasCalendarAvailability) && (
+            {(getDurationLabel(tour.durationDays) !== "To be confirmed" || tour.guideType || tour.transport || tour.groups || [tour.zone, tour.country].filter(Boolean).length > 0 || tour.departurePoint || hasCalendarAvailability) && (
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                {getDurationLabel(tour.durationDays) !== "A confirmar" && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Duracion</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{getDurationLabel(tour.durationDays)}</p>
+                {getDurationLabel(tour.durationDays) !== "To be confirmed" && (
+                  <div className="rounded-2xl border border-white/10 bg-[#171c24] px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Duration</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-100">{getDurationLabel(tour.durationDays)}</p>
                   </div>
                 )}
                 {tour.guideType && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Guia</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{tour.guideType}</p>
+                  <div className="rounded-2xl border border-white/10 bg-[#171c24] px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Guide</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-100">{tour.guideType}</p>
                   </div>
                 )}
                 {tour.transport && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Transporte</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{tour.transport}</p>
+                  <div className="rounded-2xl border border-white/10 bg-[#171c24] px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Transport</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-100">{tour.transport}</p>
                   </div>
                 )}
                 {tour.groups && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Tamano de grupo</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{tour.groups}</p>
+                  <div className="rounded-2xl border border-white/10 bg-[#171c24] px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Group size</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-100">{tour.groups}</p>
                   </div>
                 )}
                 {[tour.zone, tour.country].filter(Boolean).length > 0 && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Ubicacion del tour</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{[tour.zone, tour.country].filter(Boolean).join(", ")}</p>
+                  <div className="rounded-2xl border border-white/10 bg-[#171c24] px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Tour location</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-100">{[tour.zone, tour.country].filter(Boolean).join(", ")}</p>
                   </div>
                 )}
                 {tour.departurePoint && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Punto de salida</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{tour.departurePoint}</p>
+                  <div className="rounded-2xl border border-white/10 bg-[#171c24] px-4 py-3">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Departure point</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-100">{tour.departurePoint}</p>
                   </div>
                 )}
                 {hasCalendarAvailability && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:col-span-2">
-                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Proxima fecha</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{nextAvailableDateLabel}</p>
+                  <div className="rounded-2xl border border-white/10 bg-[#171c24] px-4 py-3 sm:col-span-2">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Next available date</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-100">{nextAvailableDateLabel}</p>
                   </div>
                 )}
               </div>
@@ -723,22 +723,22 @@ export default function TourDetailPage() {
           </article>
 
           {!isInfoOnlyTour && (Boolean(tour.tourPackages?.length) || Boolean(activePriceOptions.length)) && (
-            <article className="mt-7 rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
-              <h3 className="text-xl font-extrabold text-slate-900">Paquetes y precios</h3>
+            <article className="mt-7 rounded-2xl border border-white/10 bg-[#1c2230]/92 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+              <h3 className="text-xl font-extrabold text-white">Packages and pricing</h3>
 
               {Boolean(tour.tourPackages?.length) && (
                 <>
-                  <p className="mt-1 text-sm text-slate-600">Selecciona un paquete para ver sus precios.</p>
+                  <p className="mt-1 text-sm text-slate-300">Select a package to view its pricing options.</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {tour.tourPackages?.map((pkg) => (
                       <button
                         key={pkg.id}
                         type="button"
                         onClick={() => setSelectedPackageId(pkg.id)}
-                        className={`rounded-xl border px-3 py-3 text-left transition ${selectedPackage?.id === pkg.id ? "border-emerald-500 bg-emerald-50 shadow-sm" : "border-slate-200 bg-white hover:border-emerald-300"}`}
+                        className={`rounded-xl border px-3 py-3 text-left transition ${selectedPackage?.id === pkg.id ? "border-[var(--brand-gold)]/45 bg-[rgba(250,178,79,0.12)] shadow-sm" : "border-white/10 bg-[#171c24] hover:border-[var(--brand-gold)]/40"}`}
                       >
-                        <p className="text-sm font-extrabold text-slate-900">{pkg.title}</p>
-                        {pkg.description && <p className="mt-1 text-xs text-slate-600">{pkg.description}</p>}
+                        <p className="text-sm font-extrabold text-white">{pkg.title}</p>
+                        {pkg.description && <p className="mt-1 text-xs text-slate-300">{pkg.description}</p>}
                       </button>
                     ))}
                   </div>
@@ -746,15 +746,15 @@ export default function TourDetailPage() {
               )}
 
               {Boolean(activePriceOptions.length) && (
-                <div className="mt-4 border-t border-slate-200 pt-4">
-                  <h4 className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-500">
-                    Precios {selectedPackage ? `- ${selectedPackage.title}` : "- Paquete principal"}
+                <div className="mt-4 border-t border-white/10 pt-4">
+                  <h4 className="text-xs font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                    Prices {selectedPackage ? `- ${selectedPackage.title}` : "- Main package"}
                   </h4>
                   <div className="mt-2 space-y-1">
                     {activePriceOptions.map((option) => (
                       <div key={option.id} className="flex items-center justify-between rounded-lg px-2 py-1.5">
-                        <span className="text-sm font-semibold text-slate-600">{option.name}</span>
-                        <span className={`text-sm font-extrabold ${option.isFree || option.price === 0 ? "text-emerald-700" : "text-slate-900"}`}>
+                        <span className="text-sm font-semibold text-slate-300">{option.name}</span>
+                        <span className={`text-sm font-extrabold ${option.isFree || option.price === 0 ? "text-emerald-400" : "text-white"}`}>
                           {formatPriceLabel(option)}
                         </span>
                       </div>
@@ -768,9 +768,9 @@ export default function TourDetailPage() {
           {Boolean((detail.includes?.length || 0) + (detail.recommendations?.length || 0)) && (
             <div className="mt-7 grid gap-4 md:grid-cols-2">
               {Boolean(detail.includes?.length) && (
-                <article className="rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
-                  <h3 className="text-xl font-extrabold text-slate-900">Lo que esta incluido</h3>
-                  <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-700 marker:text-emerald-700">
+                <article className="rounded-2xl border border-white/10 bg-[#1c2230]/92 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+                  <h3 className="text-xl font-extrabold text-white">What's included</h3>
+                  <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-300 marker:text-[var(--brand-gold)]">
                     {detail.includes?.map((item) => (
                       <li key={item}>{item}</li>
                     ))}
@@ -779,9 +779,9 @@ export default function TourDetailPage() {
               )}
 
               {Boolean(detail.recommendations?.length) && (
-                <article className="rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
-                  <h3 className="text-xl font-extrabold text-slate-900">Recomendaciones</h3>
-                  <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-700 marker:text-emerald-700">
+                <article className="rounded-2xl border border-white/10 bg-[#1c2230]/92 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+                  <h3 className="text-xl font-extrabold text-white">Recommendations</h3>
+                  <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-300 marker:text-[var(--brand-gold)]">
                     {detail.recommendations?.map((item) => (
                       <li key={item}>{item}</li>
                     ))}
@@ -792,13 +792,13 @@ export default function TourDetailPage() {
           )}
 
           {Boolean(detail.faqs?.length) && (
-            <article className="mt-7 rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_8px_30px_rgba(15,23,42,0.07)] backdrop-blur-sm">
-              <h3 className="text-xl font-extrabold text-slate-900">Preguntas frecuentes</h3>
+            <article className="mt-7 rounded-2xl border border-white/10 bg-[#1c2230]/92 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.22)] backdrop-blur-sm">
+              <h3 className="text-xl font-extrabold text-white">Frequently asked questions</h3>
               <div className="mt-3 space-y-2">
                 {detail.faqs?.map((faq) => (
-                  <details key={faq.question} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <summary className="cursor-pointer font-semibold text-slate-900">{faq.question}</summary>
-                    <p className="mt-2 text-slate-700">{faq.answer}</p>
+                  <details key={faq.question} className="rounded-xl border border-white/10 bg-[#171c24] p-3">
+                    <summary className="cursor-pointer font-semibold text-slate-100">{faq.question}</summary>
+                    <p className="mt-2 text-slate-300">{faq.answer}</p>
                   </details>
                 ))}
               </div>
@@ -806,15 +806,15 @@ export default function TourDetailPage() {
           )}
         </div>
 
-        <aside className="self-start rounded-2xl border border-white/70 bg-white/95 p-5 shadow-[0_10px_35px_rgba(15,23,42,0.09)] backdrop-blur-sm lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+        <aside className="self-start rounded-2xl border border-white/10 bg-[#1c2230]/92 p-5 shadow-[0_10px_35px_rgba(0,0,0,0.25)] backdrop-blur-sm lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
           {!isInfoOnlyTour && detailPricePreview.label ? (
             <>
-              <p className="text-4xl font-black text-emerald-800">{detailPricePreview.label}</p>
-              <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">Precio segun tipo seleccionado</p>
+              <p className="text-4xl font-black text-[var(--brand-gold)]">{detailPricePreview.label}</p>
+              <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">Price based on selected option</p>
 
-              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-sm font-extrabold text-slate-800">Consulta disponibilidad</p>
-                <p className="mt-1 text-xs text-slate-600">Selecciona en el calendario una fecha disponible.</p>
+              <div className="mt-5 rounded-xl border border-white/10 bg-[#171c24] p-3">
+                <p className="text-sm font-extrabold text-white">Check availability</p>
+                <p className="mt-1 text-xs text-slate-300">Select an available date in the calendar.</p>
 
             {hasCalendarAvailability ? (
               <>
@@ -832,11 +832,11 @@ export default function TourDetailPage() {
                       if (month) setCalendarMonth(month);
                     }}
                     disabled={!calendarHasOpenAvailability && !previousAvailableMonthKey}
-                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-lg border border-white/15 bg-[#1c2230] px-2.5 py-1.5 text-xs font-bold text-slate-200 hover:border-[var(--brand-gold)]/45 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Anterior
+                    Previous
                   </button>
-                  <p className="text-sm font-bold capitalize text-slate-800">{monthLabel}</p>
+                  <p className="text-sm font-bold capitalize text-slate-100">{monthLabel}</p>
                   <button
                     type="button"
                     onClick={() => {
@@ -850,14 +850,14 @@ export default function TourDetailPage() {
                       if (month) setCalendarMonth(month);
                     }}
                     disabled={!calendarHasOpenAvailability && !nextAvailableMonthKey}
-                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-lg border border-white/15 bg-[#1c2230] px-2.5 py-1.5 text-xs font-bold text-slate-200 hover:border-[var(--brand-gold)]/45 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Siguiente
+                    Next
                   </button>
                 </div>
 
-                <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                  {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => (
+                <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
                     <span key={day} className="py-1">
                       {day}
                     </span>
@@ -872,10 +872,10 @@ export default function TourDetailPage() {
 
                     const baseClass = "h-8 rounded-md text-xs font-bold transition";
                     const className = cell.isSelected
-                      ? `${baseClass} border border-emerald-400 bg-emerald-500 text-white`
+                      ? `${baseClass} border border-[var(--brand-gold)]/45 bg-[rgba(250,178,79,0.24)] text-white`
                       : cell.isAvailable
-                        ? `${baseClass} border border-emerald-200 bg-emerald-100 text-emerald-900 hover:bg-emerald-200`
-                        : `${baseClass} border border-slate-200 bg-white text-slate-300 cursor-not-allowed`;
+                        ? `${baseClass} border border-white/12 bg-[#1c2230] text-slate-100 hover:border-[var(--brand-gold)]/45`
+                        : `${baseClass} border border-white/10 bg-[#11161d] text-slate-500 cursor-not-allowed`;
 
                     return (
                       <button
@@ -884,7 +884,7 @@ export default function TourDetailPage() {
                         disabled={!cell.isAvailable}
                         onClick={() => setSelectedAvailabilityDate(cell.key)}
                         className={className}
-                        aria-label={`Dia ${cell.dayNumber}`}
+                        aria-label={`Day ${cell.dayNumber}`}
                       >
                         {cell.dayNumber}
                       </button>
@@ -892,30 +892,30 @@ export default function TourDetailPage() {
                   })}
                 </div>
 
-                <p className="mt-2 text-[11px] text-slate-500">
+                <p className="mt-2 text-[11px] text-slate-400">
                   {calendarHasOpenAvailability
-                    ? "Modo abierto: puedes seleccionar cualquier fecha desde hoy."
-                    : "Solo se habilitan dias con disponibilidad."}
+                    ? "Open mode: you can select any date from today onward."
+                    : "Only available days are enabled."}
                 </p>
               </>
             ) : (
-              <p className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">Sin fechas disponibles por ahora.</p>
+              <p className="mt-3 rounded-lg border border-white/10 bg-[#11161d] px-3 py-2 text-sm text-slate-300">No dates available at the moment.</p>
             )}
               </div>
 
               <a
                 href={reserveHref}
-                className="mt-5 block rounded-xl bg-emerald-700 px-5 py-3 text-center font-extrabold text-white transition hover:bg-emerald-600"
+                className="mt-5 block rounded-xl bg-[var(--brand-gold)] px-5 py-3 text-center font-extrabold text-[#11151c] transition hover:brightness-105"
               >
-                Reservar ahora
+                Book now
               </a>
-              <p className="mt-3 text-xs text-slate-500">Reserva flexible y confirmacion por correo en minutos.</p>
+              <p className="mt-3 text-xs text-slate-400">Flexible booking and email confirmation in minutes.</p>
             </>
           ) : (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-extrabold text-slate-800">Tour informativo</p>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                Este tour no tiene precios configurados, por eso no se habilita reserva en linea.
+            <div className="rounded-xl border border-white/10 bg-[#171c24] p-4">
+              <p className="text-sm font-extrabold text-white">Informational tour</p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                This tour has no configured pricing, so online booking is not enabled.
               </p>
             </div>
           )}
@@ -935,7 +935,7 @@ export default function TourDetailPage() {
               type="button"
               onClick={() => setLightboxIndex(null)}
               className="absolute right-3 top-3 z-10 h-9 w-9 rounded-full bg-white text-lg font-bold leading-none text-slate-900"
-              aria-label="Cerrar imagen"
+              aria-label="Close image"
             >
               X
             </button>
@@ -944,7 +944,7 @@ export default function TourDetailPage() {
               type="button"
               onClick={() => setLightboxIndex(slideBack(lightboxIndex))}
               className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/45 px-3 py-2 text-2xl font-bold leading-none text-white transition hover:bg-black/65"
-              aria-label="Imagen anterior"
+              aria-label="Previous image"
             >
               &lt;
             </button>
@@ -953,7 +953,7 @@ export default function TourDetailPage() {
               type="button"
               onClick={() => setLightboxIndex(slideNext(lightboxIndex))}
               className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/45 px-3 py-2 text-2xl font-bold leading-none text-white transition hover:bg-black/65"
-              aria-label="Imagen siguiente"
+              aria-label="Next image"
             >
               &gt;
             </button>

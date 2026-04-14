@@ -15,15 +15,15 @@ export default function ProvidersCarousel({ logos }: ProvidersCarouselProps) {
   const trackItems = [...baseItems, ...baseItems];
 
   return (
-    <section className="bg-white py-10 md:py-12">
+    <section className="bg-transparent py-10 md:py-12">
       <div className="mx-auto max-w-6xl px-4">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm md:p-7">
+        <div className="rounded-3xl border border-white/10 bg-[#202630]/92 p-5 shadow-sm md:p-7">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Alianzas</p>
-              <h2 className="mt-1 text-2xl font-extrabold text-slate-900 md:text-3xl">Nuestros proveedores</h2>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--brand-gold)]">Alianzas</p>
+              <h2 className="mt-1 text-2xl font-extrabold text-white md:text-3xl">Nuestra red local</h2>
             </div>
-            <p className="text-sm font-semibold text-slate-500">Mas de 35 aliados turisticos</p>
+            <p className="text-sm font-semibold text-slate-400">Familias, anfitriones y aliados que hacen posible cada experiencia</p>
           </div>
 
           <div className="provider-tape" aria-label="Carrusel de proveedores">
