@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: tours-app
+    container_name: vidalocal-app
     restart: unless-stopped
     env_file:
       - .env
