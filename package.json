@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "db:generate": "prisma generate",
-    "db:ensure": "prisma migrate deploy && prisma db push --skip-generate",
+    "db:ensure": "prisma migrate deploy",
+    "db:ensure:push": "prisma migrate deploy && prisma db push --skip-generate",
     "predev": "npm run db:generate && npm run db:ensure",
     "dev": "next dev --webpack -p 3003",
     "prebuild": "npm run db:generate && npm run db:ensure",
