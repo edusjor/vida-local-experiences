@@ -1,6 +1,17 @@
 ---------------------------------------------------
-reiniciar rel docker y relevantarlo despeus de git pull
+redeploy vps (docker) despues de git pull
 
-docker compose -f docker-compose.vps.yml down --remove-orphans
-docker compose -f docker-compose.vps.yml up -d --build --force-recreate
-docker compose -f docker-compose.vps.yml logs --tail=150 app
+# 1) bajar stack anterior
+docker compose -p vida_tours_prod -f docker-compose.vps.yml down --remove-orphans
+
+# 2) levantar build nuevo
+docker compose -p vida_tours_prod -f docker-compose.vps.yml up -d --build --force-recreate
+
+# 3) ver logs de arranque
+docker compose -p vida_tours_prod -f docker-compose.vps.yml logs --tail=200 app
+
+# 4) confirmar estado del contenedor
+docker compose -p vida_tours_prod -f docker-compose.vps.yml ps
+
+# 5) prueba local en el VPS (si esto responde, nginx no deberia dar 502)
+curl -I http://127.0.0.1:3479
