@@ -8,11 +8,11 @@ services:
       - .env
     environment:
       NODE_ENV: production
-      PORT: 3009
+      PORT: 3003
       RUN_DB_GENERATE: "true"
       RUN_DB_MIGRATIONS: "true"
       RUN_DB_PUSH: "false"
     ports:
-      - "8495:3009"
+      - "3009:3003"
     volumes:
       - ./uploads:/app/uploads
