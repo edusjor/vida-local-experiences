@@ -13,6 +13,6 @@ services:
       RUN_DB_MIGRATIONS: "true"
       RUN_DB_PUSH: "false"
     ports:
-      - "3479:3003"
+      - "8495:3003"
     volumes:
       - ./uploads:/app/uploads
